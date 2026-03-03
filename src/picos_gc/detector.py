@@ -5,37 +5,32 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import numpy as np
-from scipy.signal import find_peaks, savgol_filter
+from scipy.signal import find_peaks
 
 from .reader import Chromatogram
 
 
 @dataclass
 class DetectionParams:
-    min_height: float = 500.0  # mV
+    min_height: float = 500.0     # mV
     min_prominence: float = 20.0  # mV
-    min_distance: int = 50  # data points
-    smooth_window: int = 11  # Savitzky-Golay window (odd); 0 = disabled
-    smooth_polyorder: int = 3  # SG polynomial order
+    min_distance: int = 50        # data points
 
 
 @dataclass
 class DetectedPeak:
-    index: int  # index into the raw signal array
-    left_base: int  # left valley index (from scipy prominence)
+    index: int       # index into the raw signal array
+    left_base: int   # left valley index (from scipy prominence)
     right_base: int  # right valley index (from scipy prominence)
 
 
 def detect_peaks(chrom: Chromatogram, params: DetectionParams) -> list[DetectedPeak]:
     """Detect all peaks and their valley boundaries in a chromatogram.
 
-    Applies optional Savitzky-Golay smoothing before calling find_peaks so
-    that noise spikes are suppressed. The returned indices always refer to the
-    *raw* (unsmoothed) signal.
-
     Valley boundaries (left_base / right_base) come directly from scipy's
     prominence calculation, giving correct valley-to-valley splits for
-    overlapping peaks without any custom boundary-walking.
+    overlapping peaks. The prominence threshold already suppresses noise spikes
+    without any additional smoothing.
 
     Falls back to looser thresholds (height=10, prominence=5) if nothing is
     found with the supplied params.
@@ -43,12 +38,6 @@ def detect_peaks(chrom: Chromatogram, params: DetectionParams) -> list[DetectedP
     Returns peaks sorted by retention time (left → right).
     """
     signal = chrom.signal_mV
-
-    if params.smooth_window > 0:
-        window = params.smooth_window
-        if window >= len(signal):
-            window = len(signal) // 2 * 2 - 1
-        signal = savgol_filter(signal, window, params.smooth_polyorder)
 
     peaks, props = find_peaks(
         signal,
@@ -66,7 +55,7 @@ def detect_peaks(chrom: Chromatogram, params: DetectionParams) -> list[DetectedP
         )
 
     order = np.argsort(peaks)
-    return [
+    detected = [
         DetectedPeak(
             index=int(peaks[i]),
             left_base=int(props["left_bases"][i]),
@@ -74,3 +63,15 @@ def detect_peaks(chrom: Chromatogram, params: DetectionParams) -> list[DetectedP
         )
         for i in order
     ]
+
+    # Clip overlapping boundaries: scipy sets a tall peak's base far back past
+    # shorter neighbours. For each consecutive pair whose bases overlap, use the
+    # signal valley between the two peak maxima as the shared boundary.
+    raw = chrom.signal_mV
+    for a, b in zip(detected, detected[1:]):
+        if a.right_base > b.left_base:
+            valley = int(np.argmin(raw[a.index : b.index + 1])) + a.index
+            a.right_base = valley
+            b.left_base = valley
+
+    return detected

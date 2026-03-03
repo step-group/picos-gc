@@ -143,20 +143,6 @@ def main(argv: list[str] | None = None) -> None:
         help="CSV output path (default: out/resultados_integracion.csv)",
     )
     parser.add_argument(
-        "--smooth-window",
-        metavar="INT",
-        type=int,
-        default=_d.smooth_window,
-        help=f"Savitzky-Golay window for detection smoothing, odd integer (default: {_d.smooth_window}; 0 = off)",
-    )
-    parser.add_argument(
-        "--smooth-polyorder",
-        metavar="INT",
-        type=int,
-        default=_d.smooth_polyorder,
-        help=f"Savitzky-Golay polynomial order (default: {_d.smooth_polyorder})",
-    )
-    parser.add_argument(
         "--align-tol",
         metavar="FLOAT",
         type=float,
@@ -184,11 +170,7 @@ def main(argv: list[str] | None = None) -> None:
         min_height=args.height,
         min_prominence=args.prominence,
         min_distance=args.distance,
-        smooth_window=args.smooth_window,
-        smooth_polyorder=args.smooth_polyorder,
     )
-
-    smooth_label = f"SG(window={params.smooth_window}, poly={params.smooth_polyorder})" if params.smooth_window > 0 else "off"
 
     print("=" * 75)
     print("INTEGRACION DE PEAKS - GC Shimadzu (.gcd)")
@@ -197,7 +179,6 @@ def main(argv: list[str] | None = None) -> None:
     print(f"Height    : {params.min_height} mV")
     print(f"Prominence: {params.min_prominence} mV")
     print(f"Distance  : {params.min_distance} pts")
-    print(f"Smoothing : {smooth_label}")
     print()
 
     results = process_batch(filepaths, params)
