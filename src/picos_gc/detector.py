@@ -12,15 +12,15 @@ from .reader import Chromatogram
 
 @dataclass
 class DetectionParams:
-    min_height: float = 500.0     # mV
+    min_height: float = 50.0  # mV
     min_prominence: float = 20.0  # mV
-    min_distance: int = 50        # data points
+    min_distance: int = 50  # data points
 
 
 @dataclass
 class DetectedPeak:
-    index: int       # index into the raw signal array
-    left_base: int   # left valley index (from scipy prominence)
+    index: int  # index into the raw signal array
+    left_base: int  # left valley index (from scipy prominence)
     right_base: int  # right valley index (from scipy prominence)
 
 
