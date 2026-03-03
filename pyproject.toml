@@ -1,0 +1,25 @@
+[project]
+name = "picos-gc"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "Maximilian Fleckenstein", email = "maximilianfv@uc.cl" }
+]
+requires-python = ">=3.13"
+dependencies = [
+    "matplotlib>=3.10.8",
+    "numpy>=1.24",
+    "olefile>=0.47",
+    "scipy>=1.17.1",
+]
+
+[project.optional-dependencies]
+plot = ["matplotlib>=3.7"]
+
+[project.scripts]
+picos-gc = "picos_gc.cli:main"
+
+[build-system]
+requires = ["uv_build>=0.10.6,<0.11.0"]
+build-backend = "uv_build"
