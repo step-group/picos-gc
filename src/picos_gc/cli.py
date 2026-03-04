@@ -3,12 +3,18 @@
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 from pathlib import Path
 
 from .aligner import align_peaks, save_aligned_csv
 from .detector import DetectionParams
 from .processor import FileResult, process_batch, save_csv
+
+
+def _natural_key(p: Path) -> list:
+    """Sort key that orders '2pe2' before '2pe10' (natural / human sort)."""
+    return [int(c) if c.isdigit() else c.lower() for c in re.split(r"(\d+)", p.name)]
 
 
 def _collect_batches(inputs: list[Path]) -> list[tuple[str, list[Path]]]:
@@ -30,18 +36,18 @@ def _collect_batches(inputs: list[Path]) -> list[tuple[str, list[Path]]]:
         if p.is_file():
             loose_files.append(p)
         elif p.is_dir():
-            direct = sorted(p.glob("*.gcd"))
+            direct = sorted(p.glob("*.gcd"), key=_natural_key)
             if direct:
                 batches.append((p.name, direct))
             else:
-                for sub in sorted(p.iterdir()):
+                for sub in sorted(p.iterdir(), key=_natural_key):
                     if sub.is_dir():
-                        files = sorted(sub.glob("*.gcd"))
+                        files = sorted(sub.glob("*.gcd"), key=_natural_key)
                         if files:
                             batches.append((sub.name, files))
 
     if loose_files:
-        batches.insert(0, ("batch", loose_files))
+        batches.insert(0, ("batch", sorted(loose_files, key=_natural_key)))
 
     return batches
 
