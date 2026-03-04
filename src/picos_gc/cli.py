@@ -225,6 +225,13 @@ def main(argv: list[str] | None = None) -> None:
         help="base output directory (default: out/)",
     )
     parser.add_argument(
+        "--min-width",
+        metavar="FLOAT",
+        type=float,
+        default=_d.min_width_min,
+        help=f"min peak width in minutes (default: {_d.min_width_min}; 0 = off)",
+    )
+    parser.add_argument(
         "--align-tol",
         metavar="FLOAT",
         type=float,
@@ -255,6 +262,7 @@ def main(argv: list[str] | None = None) -> None:
         min_height=args.height,
         min_prominence=args.prominence,
         min_distance=args.distance,
+        min_width_min=args.min_width,
     )
 
     print("=" * 75)

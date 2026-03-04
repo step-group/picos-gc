@@ -12,9 +12,10 @@ from .reader import Chromatogram
 
 @dataclass
 class DetectionParams:
-    min_height: float = 50.0  # mV
+    min_height: float = 50.0      # mV
     min_prominence: float = 20.0  # mV
-    min_distance: int = 50  # data points
+    min_distance: int = 50        # data points
+    min_width_min: float = 0.03   # minutes (~1.8 s) — filters sub-second artifacts
 
 
 @dataclass
@@ -41,11 +42,16 @@ def detect_peaks(chrom: Chromatogram, params: DetectionParams) -> list[DetectedP
     """
     signal = chrom.signal_mV
 
+    # Convert min_width from minutes to data points using actual sampling rate
+    pts_per_min = len(chrom.time_min) / (chrom.time_min[-1] - chrom.time_min[0])
+    width_pts = params.min_width_min * pts_per_min
+
     peaks, props = find_peaks(
         signal,
         height=params.min_height,
         prominence=params.min_prominence,
         distance=params.min_distance,
+        width=width_pts,
     )
 
     if len(peaks) == 0:
@@ -54,6 +60,7 @@ def detect_peaks(chrom: Chromatogram, params: DetectionParams) -> list[DetectedP
             height=10.0,
             prominence=5.0,
             distance=params.min_distance,
+            width=width_pts,
         )
 
     # peak_widths at rel_height=1.0: boundaries at the prominence reference
