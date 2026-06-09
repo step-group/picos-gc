@@ -48,3 +48,27 @@ def test_time_to_index_endpoints_and_clamp():
 def test_time_to_index_zero_span():
     chrom = make_chrom(np.zeros(10), t_start=3.0, t_end=3.0)
     assert time_to_index(chrom, 3.0) == 0
+
+
+def test_data_starts_at_offset_24_not_16(example_gcd):
+    """Regression: the signal stream's data begins at byte 24.
+
+    Reading from byte 16 (the old behavior) prepended the 8 zero-padding
+    bytes as a spurious leading 0.0 sample and dropped the last real sample.
+    """
+    import struct
+
+    import olefile
+
+    ole = olefile.OleFileIO(example_gcd)
+    raw = ole.openstream("LSS Raw Data/Chromatogram Ch1").read()
+    ole.close()
+
+    assert raw[:2] == b"RC"  # magic
+    assert raw[16:24] == b"\x00" * 8  # zero padding before the data
+    first_raw_sample_uV = struct.unpack("<d", raw[24:32])[0]
+
+    chrom = read_gcd(example_gcd)
+    # The reader must surface the real first sample, not the padding zero.
+    assert chrom.signal_mV[0] != 0.0
+    assert chrom.signal_mV[0] * 1000.0 == pytest.approx(first_raw_sample_uV)

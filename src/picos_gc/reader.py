@@ -36,26 +36,27 @@ def read_gcd(filepath: Path | str) -> Chromatogram:
     try:
         raw = ole.openstream("LSS Raw Data/Chromatogram Ch1").read()
 
-        # Stream header layout:
+        # Stream header layout (24-byte header, verified against real files):
         #   bytes 0-1  : 'RC' magic
-        #   bytes 4-7  : header size (40 bytes)
         #   bytes 8-11 : number of data points (uint32 LE)
-        #   bytes 12-15: total stream size
-        #   byte  16+  : data as float64 LE, in µV
+        #   bytes 12-15: total stream size in bytes (uint32 LE)
+        #   bytes 16-23: zero padding
+        #   bytes 24+  : signal as float64 LE, in µV (one value per data point)
+        # NB: the data begins at byte 24, not 16 — reading from 16 prepends the
+        # 8 zero-padding bytes as a spurious leading sample and drops the last.
         try:
             n_points = struct.unpack("<I", raw[8:12])[0]
         except struct.error as exc:
             raise ValueError(f"Cannot parse point count in '{filepath}'") from exc
 
-        offset = 16
+        offset = 24
         expected_bytes = n_points * 8
         if len(raw) < offset + expected_bytes:
             raise ValueError(
-                f"Stream too short in '{filepath}': expected {offset + expected_bytes} bytes"
+                f"Stream too short in '{filepath}': expected at least "
+                f"{offset + expected_bytes} bytes, got {len(raw)}"
             )
-        signal_uV = np.array(
-            struct.unpack("<" + str(n_points) + "d", raw[offset : offset + expected_bytes])
-        )
+        signal_uV = np.frombuffer(raw, dtype="<f8", count=n_points, offset=offset)
 
         status = ole.openstream("LSS Raw Data/Chromatogram Status").read()
         try:
