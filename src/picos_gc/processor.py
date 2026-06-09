@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -28,26 +29,18 @@ def process_file(filepath: Path | str, params: DetectionParams) -> FileResult:
     try:
         chrom = read_gcd(filepath)
     except ValueError as exc:
-        return FileResult(
-            filepath=filepath, filename=filename, chromatogram=None, error=str(exc)
-        )
+        return FileResult(filepath=filepath, filename=filename, chromatogram=None, error=str(exc))
 
     try:
         peak_indices = detect_peaks(chrom, params)
         peaks = integrate_all_peaks(chrom, peak_indices)
     except Exception as exc:
-        return FileResult(
-            filepath=filepath, filename=filename, chromatogram=chrom, error=str(exc)
-        )
+        return FileResult(filepath=filepath, filename=filename, chromatogram=chrom, error=str(exc))
 
-    return FileResult(
-        filepath=filepath, filename=filename, chromatogram=chrom, peaks=peaks
-    )
+    return FileResult(filepath=filepath, filename=filename, chromatogram=chrom, peaks=peaks)
 
 
-def process_batch(
-    filepaths: list[Path | str], params: DetectionParams
-) -> list[FileResult]:
+def process_batch(filepaths: Sequence[Path | str], params: DetectionParams) -> list[FileResult]:
     """Process a list of .gcd files and return one FileResult each.
 
     Prints a one-line progress message per file to stdout.

@@ -8,3 +8,12 @@ wheels/
 
 # Virtual environments
 .venv
+
+# Generated outputs
+out/
+out.zip
+
+# Tooling caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/

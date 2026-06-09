@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import csv
 import statistics
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 from .processor import FileResult
@@ -12,13 +12,13 @@ from .processor import FileResult
 
 @dataclass
 class Compound:
-    compound_id: int           # 1-based, sorted by median tR
-    median_tR: float           # representative retention time
-    tR_std: float              # std of tR across files (drift indicator)
+    compound_id: int  # 1-based, sorted by median tR
+    median_tR: float  # representative retention time
+    tR_std: float  # std of tR across files (drift indicator)
     mean_area: float
     std_area: float
-    rsd_pct: float             # relative std dev of area (%)
-    n_detected: int            # how many files detected this compound
+    rsd_pct: float  # relative std dev of area (%)
+    n_detected: int  # how many files detected this compound
 
 
 @dataclass
@@ -37,7 +37,7 @@ def align_peaks(results: list[FileResult], tol_min: float = 0.1) -> AlignmentRes
          tR values exceeds `tol_min`. This is single-linkage clustering — simple,
          fast, and explainable.
       3. Assign a compound ID (1-based, left to right in time) to each cluster.
-      4. For each file × compound, pick the peak whose tR is closest to the
+      4. For each file and compound, pick the peak whose tR is closest to the
          cluster median (there should normally be at most one per file).
 
     Args:
@@ -94,13 +94,12 @@ def align_peaks(results: list[FileResult], tol_min: float = 0.1) -> AlignmentRes
     # Match by tR range of each cluster [min_tR - tol, max_tR + tol] so that a
     # peak included in a cluster is always matched back to it regardless of drift.
     cluster_ranges = [
-        (min(e[0] for e in cl) - tol_min, max(e[0] for e in cl) + tol_min)
-        for cl in clusters
+        (min(e[0] for e in cl) - tol_min, max(e[0] for e in cl) + tol_min) for cl in clusters
     ]
     table: dict[int, list[tuple[float | None, float | None]]] = {}
     for i, r in enumerate(results):
         row: list[tuple[float | None, float | None]] = []
-        for (lo, hi), compound in zip(cluster_ranges, compounds):
+        for (lo, hi), compound in zip(cluster_ranges, compounds, strict=True):
             best = None
             best_dist = float("inf")
             for p in r.peaks:
@@ -121,8 +120,8 @@ def save_aligned_csv(alignment: AlignmentResult, results: list[FileResult], outp
     Header:
         filename, cmp1_tR_min, cmp1_area_mV_min, cmp2_tR_min, cmp2_area_mV_min, ...
 
-    Footer rows (after a blank line):
-        median_tR, mean_area, std_area, rsd_pct per compound
+    Footer rows (after a blank line), one value per compound in its area cell:
+        median_tR, tR_std, mean_area, std_area, rsd_pct, n_detected
     """
     output = Path(output)
     n = len(alignment.compounds)
@@ -146,11 +145,11 @@ def save_aligned_csv(alignment: AlignmentResult, results: list[FileResult], outp
         # Summary footer
         writer.writerow([])
         for label, getter in [
-            ("median_tR",  lambda c: f"{c.median_tR:.4f}"),
-            ("tR_std",     lambda c: f"{c.tR_std:.4f}"),
-            ("mean_area",  lambda c: f"{c.mean_area:.4f}"),
-            ("std_area",   lambda c: f"{c.std_area:.4f}"),
-            ("rsd_pct",    lambda c: f"{c.rsd_pct:.2f}"),
+            ("median_tR", lambda c: f"{c.median_tR:.4f}"),
+            ("tR_std", lambda c: f"{c.tR_std:.4f}"),
+            ("mean_area", lambda c: f"{c.mean_area:.4f}"),
+            ("std_area", lambda c: f"{c.std_area:.4f}"),
+            ("rsd_pct", lambda c: f"{c.rsd_pct:.2f}"),
             ("n_detected", lambda c: str(c.n_detected)),
         ]:
             row = [label]

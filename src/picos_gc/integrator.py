@@ -13,8 +13,8 @@ from .reader import Chromatogram
 
 @dataclass
 class PeakResult:
-    peak_number: int   # 1-based, ordered by retention time
-    time_min: float    # retention time (tR)
+    peak_number: int  # 1-based, ordered by retention time
+    time_min: float  # retention time (tR)
     height_mV: float
     area_mV_min: float
     left_min: float
@@ -45,9 +45,7 @@ def integrate_peak(
     return float(trapezoid(corrected, t_seg))
 
 
-def integrate_all_peaks(
-    chrom: Chromatogram, detected: list[DetectedPeak]
-) -> list[PeakResult]:
+def integrate_all_peaks(chrom: Chromatogram, detected: list[DetectedPeak]) -> list[PeakResult]:
     """Integrate every detected peak and return one PeakResult per peak."""
     results: list[PeakResult] = []
     for number, dp in enumerate(detected, start=1):

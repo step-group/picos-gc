@@ -7,9 +7,10 @@ import re
 import sys
 from pathlib import Path
 
-from .aligner import align_peaks, save_aligned_csv
+from .aligner import AlignmentResult, align_peaks, save_aligned_csv
 from .detector import DetectionParams
 from .processor import FileResult, process_batch, save_csv
+from .reader import time_to_index
 
 
 def _natural_key(p: Path) -> list:
@@ -56,7 +57,9 @@ def _print_summary(results: list[FileResult]) -> None:
     print("\n" + "=" * 75)
     print("RESUMEN DE PEAKS")
     print("=" * 75)
-    header = f"{'Archivo':<22} {'Peak':>4}  {'tR(min)':>8}  {'Altura(mV)':>10}  {'Area(mV*min)':>13}"
+    header = (
+        f"{'Archivo':<22} {'Peak':>4}  {'tR(min)':>8}  {'Altura(mV)':>10}  {'Area(mV*min)':>13}"
+    )
     print(header)
     print("-" * 75)
 
@@ -75,7 +78,7 @@ def _print_summary(results: list[FileResult]) -> None:
     print("=" * 75)
 
 
-def _print_alignment_summary(alignment) -> None:
+def _print_alignment_summary(alignment: AlignmentResult) -> None:
     if not alignment.compounds:
         print("\n(no compounds detected for alignment)")
         return
@@ -113,18 +116,8 @@ def _plot_file(result: FileResult, output_dir: Path) -> None:
     ax.plot(chrom.time_min, chrom.signal_mV, color="steelblue", linewidth=0.8, label="signal")
 
     for peak in result.peaks:
-        left_idx = int(
-            (peak.left_min - chrom.time_min[0])
-            / (chrom.time_min[-1] - chrom.time_min[0])
-            * (len(chrom.time_min) - 1)
-        )
-        right_idx = int(
-            (peak.right_min - chrom.time_min[0])
-            / (chrom.time_min[-1] - chrom.time_min[0])
-            * (len(chrom.time_min) - 1)
-        )
-        left_idx = max(0, min(left_idx, len(chrom.time_min) - 1))
-        right_idx = max(0, min(right_idx, len(chrom.time_min) - 1))
+        left_idx = time_to_index(chrom, peak.left_min)
+        right_idx = time_to_index(chrom, peak.right_min)
 
         t_seg = chrom.time_min[left_idx : right_idx + 1]
         s_seg = chrom.signal_mV[left_idx : right_idx + 1]
@@ -238,6 +231,41 @@ def main(argv: list[str] | None = None) -> None:
         help=f"min peak width in minutes (default: {_d.min_width_min}; 0 = off)",
     )
     parser.add_argument(
+        "--smooth-window",
+        metavar="INT",
+        type=int,
+        default=_d.smooth_window,
+        help=(
+            "Savitzky-Golay window (odd integer) for detection only; integration "
+            f"always uses the raw signal (default: {_d.smooth_window}; 0 = off)"
+        ),
+    )
+    parser.add_argument(
+        "--smooth-polyorder",
+        metavar="INT",
+        type=int,
+        default=_d.smooth_polyorder,
+        help=f"Savitzky-Golay polynomial order (default: {_d.smooth_polyorder})",
+    )
+    parser.add_argument(
+        "--merge-ratio",
+        metavar="FLOAT",
+        type=float,
+        default=_d.merge_shoulder_ratio,
+        help=(
+            "merge two adjacent peaks when the baseline-corrected valley between "
+            "them rises above this fraction of the smaller peak "
+            f"(default: {_d.merge_shoulder_ratio}; 0 = off, →1 merges only the worst-resolved)"
+        ),
+    )
+    parser.add_argument(
+        "--merge-distance",
+        metavar="FLOAT",
+        type=float,
+        default=_d.merge_distance_min,
+        help=f"merge adjacent peaks within this tR distance in minutes (default: {_d.merge_distance_min}; 0 = off)",
+    )
+    parser.add_argument(
         "--align-tol",
         metavar="FLOAT",
         type=float,
@@ -259,6 +287,14 @@ def main(argv: list[str] | None = None) -> None:
             print(f"ERROR: not found: {m}", file=sys.stderr)
         sys.exit(1)
 
+    if args.smooth_window > 0 and args.smooth_window % 2 == 0:
+        parser.error(f"--smooth-window must be odd (or 0 to disable), got {args.smooth_window}")
+    if args.smooth_window > 0 and args.smooth_window <= args.smooth_polyorder:
+        parser.error(
+            f"--smooth-window ({args.smooth_window}) must be greater than "
+            f"--smooth-polyorder ({args.smooth_polyorder})"
+        )
+
     batches = _collect_batches(inputs)
     if not batches:
         print("ERROR: no .gcd files found in the given paths.", file=sys.stderr)
@@ -269,6 +305,10 @@ def main(argv: list[str] | None = None) -> None:
         min_prominence=args.prominence,
         min_distance=args.distance,
         min_width_min=args.min_width,
+        smooth_window=args.smooth_window,
+        smooth_polyorder=args.smooth_polyorder,
+        merge_shoulder_ratio=args.merge_ratio,
+        merge_distance_min=args.merge_distance,
     )
 
     print("=" * 75)
@@ -278,6 +318,15 @@ def main(argv: list[str] | None = None) -> None:
     print(f"Height    : {params.min_height} mV")
     print(f"Prominence: {params.min_prominence} mV")
     print(f"Distance  : {params.min_distance} pts")
+    smooth_desc = (
+        f"{params.smooth_window} (poly {params.smooth_polyorder})"
+        if params.smooth_window
+        else "off"
+    )
+    print(f"Smoothing : {smooth_desc}")
+    print(
+        f"Merge     : ratio {params.merge_shoulder_ratio or 'off'}, distance {params.merge_distance_min or 'off'} min"
+    )
     print(f"Output    : {args.outdir}/")
 
     for label, filepaths in batches:

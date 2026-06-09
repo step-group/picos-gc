@@ -4,23 +4,24 @@ from .aligner import AlignmentResult, Compound, align_peaks, save_aligned_csv
 from .detector import DetectedPeak, DetectionParams, detect_peaks
 from .integrator import PeakResult, integrate_all_peaks, integrate_peak
 from .processor import FileResult, process_batch, process_file, save_csv
-from .reader import Chromatogram, read_gcd
+from .reader import Chromatogram, read_gcd, time_to_index
 
 __all__ = [
     "AlignmentResult",
-    "Compound",
-    "align_peaks",
-    "save_aligned_csv",
     "Chromatogram",
-    "read_gcd",
+    "Compound",
     "DetectedPeak",
     "DetectionParams",
-    "detect_peaks",
-    "PeakResult",
-    "integrate_peak",
-    "integrate_all_peaks",
     "FileResult",
-    "process_file",
+    "PeakResult",
+    "align_peaks",
+    "detect_peaks",
+    "integrate_all_peaks",
+    "integrate_peak",
     "process_batch",
+    "process_file",
+    "read_gcd",
+    "save_aligned_csv",
     "save_csv",
+    "time_to_index",
 ]

@@ -74,3 +74,18 @@ def read_gcd(filepath: Path | str) -> Chromatogram:
     signal_mV = signal_uV / 1000.0
 
     return Chromatogram(filepath=filepath, time_min=time_min, signal_mV=signal_mV)
+
+
+def time_to_index(chrom: Chromatogram, t: float) -> int:
+    """Map a retention time (min) to the nearest sample index, clamped in range.
+
+    Assumes the uniform sampling produced by :func:`read_gcd`.
+    """
+    n = len(chrom.time_min)
+    if n == 0:
+        return 0
+    span = float(chrom.time_min[-1] - chrom.time_min[0])
+    if span <= 0:
+        return 0
+    idx = round((t - float(chrom.time_min[0])) / span * (n - 1))
+    return max(0, min(idx, n - 1))
