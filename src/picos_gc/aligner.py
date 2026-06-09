@@ -18,7 +18,10 @@ class Compound:
     mean_area: float
     std_area: float
     rsd_pct: float  # relative std dev of area (%)
-    n_detected: int  # how many files detected this compound
+    # Number of peak entries in this cluster. Usually equals the number of
+    # files that detected the compound, but a file contributing two peaks
+    # within the tolerance counts twice.
+    n_detected: int
 
 
 @dataclass

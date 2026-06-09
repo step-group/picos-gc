@@ -45,13 +45,69 @@ def integrate_peak(
     return float(trapezoid(corrected, t_seg))
 
 
-def integrate_all_peaks(chrom: Chromatogram, detected: list[DetectedPeak]) -> list[PeakResult]:
-    """Integrate every detected peak and return one PeakResult per peak."""
+def _fused_groups(detected: list[DetectedPeak]) -> list[list[DetectedPeak]]:
+    """Split peaks into chains of fused neighbours (adjacent windows sharing a boundary)."""
+    groups: list[list[DetectedPeak]] = []
+    for dp in detected:
+        if groups and groups[-1][-1].right_base == dp.left_base:
+            groups[-1].append(dp)
+        else:
+            groups.append([dp])
+    return groups
+
+
+def _integrate_drop(time: np.ndarray, signal: np.ndarray, group: list[DetectedPeak]) -> list[float]:
+    """Perpendicular-drop integration of one fused group.
+
+    One straight baseline is drawn across the whole group (outer foot to outer
+    foot) and each peak's area is the clamped integral of its vertical slice,
+    split at the shared valley boundaries. This matches the Shimadzu-style
+    vertical-division convention and conserves the group's total area, unlike
+    valley-to-valley baselines which cut away the overlap region.
+    """
+    lo, hi = group[0].left_base, group[-1].right_base
+    t_seg = time[lo : hi + 1]
+    s_seg = signal[lo : hi + 1]
+    if len(t_seg) < 2 or t_seg[-1] == t_seg[0]:
+        return [0.0] * len(group)
+    baseline = s_seg[0] + (s_seg[-1] - s_seg[0]) * (t_seg - t_seg[0]) / (t_seg[-1] - t_seg[0])
+    corrected = np.maximum(s_seg - baseline, 0)
+    areas: list[float] = []
+    for dp in group:
+        i0, i1 = dp.left_base - lo, dp.right_base - lo
+        areas.append(float(trapezoid(corrected[i0 : i1 + 1], t_seg[i0 : i1 + 1])))
+    return areas
+
+
+def integrate_all_peaks(
+    chrom: Chromatogram, detected: list[DetectedPeak], split_mode: str = "valley"
+) -> list[PeakResult]:
+    """Integrate every detected peak and return one PeakResult per peak.
+
+    split_mode controls how fused peaks (adjacent windows sharing a valley
+    boundary) are handled:
+      - "valley" (default): each peak gets its own baseline between its two
+        boundary points (valley-to-valley). Conservative; underestimates badly
+        fused pairs because the baseline rises to the valley.
+      - "drop": one baseline across each fused group, areas split vertically
+        at the valleys (perpendicular drop). Conserves the group's total area.
+    Isolated peaks are identical in both modes.
+    """
+    if split_mode not in ("valley", "drop"):
+        raise ValueError(f"split_mode must be 'valley' or 'drop', got {split_mode!r}")
+
+    areas: list[float] = []
+    if split_mode == "valley":
+        areas = [
+            integrate_peak(chrom.time_min, chrom.signal_mV, dp.index, dp.left_base, dp.right_base)
+            for dp in detected
+        ]
+    else:
+        for group in _fused_groups(detected):
+            areas.extend(_integrate_drop(chrom.time_min, chrom.signal_mV, group))
+
     results: list[PeakResult] = []
-    for number, dp in enumerate(detected, start=1):
-        area = integrate_peak(
-            chrom.time_min, chrom.signal_mV, dp.index, dp.left_base, dp.right_base
-        )
+    for number, (dp, area) in enumerate(zip(detected, areas, strict=True), start=1):
         results.append(
             PeakResult(
                 peak_number=number,

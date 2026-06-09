@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from picos_gc.detector import DetectedPeak
+from picos_gc.detector import DetectedPeak, DetectionParams, detect_peaks
 from picos_gc.integrator import integrate_all_peaks, integrate_peak
 from tests.helpers import gaussian, make_chrom
 
@@ -62,3 +62,56 @@ def test_integrate_all_peaks_numbers_and_fields():
     assert results[1].time_min == pytest.approx(7.0, abs=0.01)
     assert all(r.area_mV_min > 0 for r in results)
     assert results[0].height_mV > results[1].height_mV
+
+
+def test_noisy_isolated_peak_area_accurate_with_clipping():
+    # End-to-end: clipping keeps the area of a peak over a noisy baseline
+    # close to analytic (was +60% with legacy wide windows).
+    rng = np.random.default_rng(42)
+    t = np.linspace(0, 10, 60000)
+    height, width = 500.0, 0.05
+    sig = gaussian(t, 5.0, height, width) + rng.normal(0, 2.0, t.shape)
+    chrom = make_chrom(sig)
+    results = integrate_all_peaks(chrom, detect_peaks(chrom, DetectionParams()))
+    assert len(results) == 1
+    expected = height * width * SQRT_2PI
+    assert results[0].area_mV_min == pytest.approx(expected, rel=0.03)
+
+
+def test_drop_mode_conserves_fused_pair_area():
+    # Valley mode integrates each fused peak above a chord rising to the
+    # valley, cutting away the overlap; drop mode draws one baseline across
+    # the group and conserves the total.
+    t = np.linspace(0, 10, 60000)
+    sig = gaussian(t, 5.0, 500, 0.08) + gaussian(t, 5.25, 300, 0.08)
+    chrom = make_chrom(sig)
+    detected = detect_peaks(chrom, DetectionParams(merge_shoulder_ratio=0.0))
+    assert len(detected) == 2
+    expected_total = (500 + 300) * 0.08 * SQRT_2PI
+
+    valley = integrate_all_peaks(chrom, detected, split_mode="valley")
+    drop = integrate_all_peaks(chrom, detected, split_mode="drop")
+
+    total_valley = sum(r.area_mV_min for r in valley)
+    total_drop = sum(r.area_mV_min for r in drop)
+    assert total_drop == pytest.approx(expected_total, rel=0.02)
+    assert total_valley < 0.6 * expected_total  # documents the valley-mode loss
+    # the larger peak keeps the larger share
+    assert drop[0].area_mV_min > drop[1].area_mV_min
+
+
+def test_drop_mode_equals_valley_for_isolated_peaks():
+    t = np.linspace(0, 10, 20000)
+    sig = gaussian(t, 3.0, 1000, 0.05) + gaussian(t, 7.0, 800, 0.05)
+    chrom = make_chrom(sig)
+    detected = detect_peaks(chrom, DetectionParams(merge_shoulder_ratio=0.0))
+    valley = integrate_all_peaks(chrom, detected, split_mode="valley")
+    drop = integrate_all_peaks(chrom, detected, split_mode="drop")
+    for v, d in zip(valley, drop, strict=True):
+        assert d.area_mV_min == pytest.approx(v.area_mV_min, rel=1e-9)
+
+
+def test_split_mode_validation():
+    chrom = make_chrom(np.zeros(100))
+    with pytest.raises(ValueError, match="split_mode"):
+        integrate_all_peaks(chrom, [], split_mode="bogus")

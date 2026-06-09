@@ -75,7 +75,8 @@ Footer rows (one value per compound, in the area cell): `median_tR`, `tR_std`,
 usage: picos-gc [-h] [--height FLOAT] [--prominence FLOAT] [--distance INT]
                 [--outdir DIR] [--min-width FLOAT] [--smooth-window INT]
                 [--smooth-polyorder INT] [--merge-ratio FLOAT]
-                [--merge-distance FLOAT] [--align-tol FLOAT] [--plot]
+                [--merge-distance FLOAT] [--clip-frac FLOAT]
+                [--split-mode {valley,drop}] [--align-tol FLOAT] [--plot]
                 FILES_OR_DIRS ...
 ```
 
@@ -90,6 +91,8 @@ usage: picos-gc [-h] [--height FLOAT] [--prominence FLOAT] [--distance INT]
 | `--smooth-polyorder` | 3 | Savitzky-Golay polynomial order |
 | `--merge-ratio` | 0.5 | Merge two adjacent peaks when the baseline-corrected valley between them rises above this fraction of the smaller peak (`0` = off; values toward `1` merge only the worst-resolved pairs) |
 | `--merge-distance` | 0 min | Merge adjacent peaks whose retention times are within this distance (`0` = off) |
+| `--clip-frac` | 0.001 | Clip each integration window to where the baseline-corrected signal stays above this fraction of the peak height (`0` = off, legacy wide windows) |
+| `--split-mode` | `valley` | How to integrate fused peaks: `valley` = per-peak valley-to-valley baseline; `drop` = one baseline per fused group with vertical splits at the valleys (Shimadzu-style, conserves the group total) |
 | `--align-tol` | 0.1 min | Retention time tolerance for cross-file alignment (`0` = skip) |
 | `--plot` | off | Save a `<name>_peaks.png` per file (requires `matplotlib`) |
 
@@ -110,10 +113,18 @@ usage: picos-gc [-h] [--height FLOAT] [--prominence FLOAT] [--distance INT]
    pair's outer bases, stays above `--merge-ratio` of the smaller peak. A separate
    proximity merge (`--merge-distance`) combines peaks that are simply close in
    retention time. Both are configurable; the shoulder merge is on by default.
-6. **Integrate** — for each peak, draws a linear baseline between its boundaries,
+6. **Clip** — each integration window is shrunk to the contiguous region around
+   the apex where the baseline-corrected signal stays above `--clip-frac` of the
+   peak height. Prominence-base boundaries can otherwise sit minutes away from
+   the peak, and the zero-clamped integral accumulates baseline noise and drift
+   over the slack (observed up to +307% on small peaks in real data). Boundaries
+   shared by genuinely fused peaks stay at their valley.
+7. **Integrate** — for each peak, draws a linear baseline between its boundaries,
    subtracts it, clamps negatives to zero, and integrates with the trapezoidal
-   rule (on the raw signal).
-7. **Align** — clusters all detected peaks across files by retention time
+   rule (on the raw signal). With `--split-mode drop`, fused groups instead get
+   one baseline across the whole group and are split vertically at the valleys,
+   which conserves the group's total area.
+8. **Align** — clusters all detected peaks across files by retention time
    proximity, assigns a compound ID to each cluster, and matches each file's peaks
    back to it.
 

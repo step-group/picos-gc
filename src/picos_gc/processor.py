@@ -21,7 +21,9 @@ class FileResult:
     error: str | None = None
 
 
-def process_file(filepath: Path | str, params: DetectionParams) -> FileResult:
+def process_file(
+    filepath: Path | str, params: DetectionParams, split_mode: str = "valley"
+) -> FileResult:
     """Read, detect peaks, and integrate a single .gcd file."""
     filepath = Path(filepath)
     filename = filepath.name
@@ -33,14 +35,16 @@ def process_file(filepath: Path | str, params: DetectionParams) -> FileResult:
 
     try:
         peak_indices = detect_peaks(chrom, params)
-        peaks = integrate_all_peaks(chrom, peak_indices)
+        peaks = integrate_all_peaks(chrom, peak_indices, split_mode=split_mode)
     except Exception as exc:
         return FileResult(filepath=filepath, filename=filename, chromatogram=chrom, error=str(exc))
 
     return FileResult(filepath=filepath, filename=filename, chromatogram=chrom, peaks=peaks)
 
 
-def process_batch(filepaths: Sequence[Path | str], params: DetectionParams) -> list[FileResult]:
+def process_batch(
+    filepaths: Sequence[Path | str], params: DetectionParams, split_mode: str = "valley"
+) -> list[FileResult]:
     """Process a list of .gcd files and return one FileResult each.
 
     Prints a one-line progress message per file to stdout.
@@ -48,7 +52,7 @@ def process_batch(filepaths: Sequence[Path | str], params: DetectionParams) -> l
     results: list[FileResult] = []
     for fp in filepaths:
         fp = Path(fp)
-        result = process_file(fp, params)
+        result = process_file(fp, params, split_mode=split_mode)
         if result.error:
             print(f"  ERROR  {fp.name}: {result.error}")
         else:

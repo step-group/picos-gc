@@ -152,6 +152,7 @@ def _run_batch(
     output_base: Path,
     align_tol: float,
     plot: bool,
+    split_mode: str = "valley",
 ) -> None:
     """Run the full pipeline for one batch and save all outputs."""
     out_dir = output_base / label
@@ -162,7 +163,7 @@ def _run_batch(
     print(f"BATCH: {label}  ({len(filepaths)} files)")
     print("=" * 75)
 
-    results = process_batch(filepaths, params)
+    results = process_batch(filepaths, params, split_mode=split_mode)
     _print_summary(results)
 
     save_csv(results, csv_path)
@@ -266,6 +267,27 @@ def main(argv: list[str] | None = None) -> None:
         help=f"merge adjacent peaks within this tR distance in minutes (default: {_d.merge_distance_min}; 0 = off)",
     )
     parser.add_argument(
+        "--clip-frac",
+        metavar="FLOAT",
+        type=float,
+        default=_d.clip_window_frac,
+        help=(
+            "clip each integration window to where the baseline-corrected signal "
+            "stays above this fraction of the peak height "
+            f"(default: {_d.clip_window_frac}; 0 = off, legacy wide windows)"
+        ),
+    )
+    parser.add_argument(
+        "--split-mode",
+        choices=("valley", "drop"),
+        default="valley",
+        help=(
+            "how to integrate fused peaks: 'valley' = per-peak valley-to-valley "
+            "baseline (default), 'drop' = one baseline per fused group with "
+            "vertical splits at the valleys (Shimadzu-style, conserves total area)"
+        ),
+    )
+    parser.add_argument(
         "--align-tol",
         metavar="FLOAT",
         type=float,
@@ -309,6 +331,7 @@ def main(argv: list[str] | None = None) -> None:
         smooth_polyorder=args.smooth_polyorder,
         merge_shoulder_ratio=args.merge_ratio,
         merge_distance_min=args.merge_distance,
+        clip_window_frac=args.clip_frac,
     )
 
     print("=" * 75)
@@ -327,10 +350,14 @@ def main(argv: list[str] | None = None) -> None:
     print(
         f"Merge     : ratio {params.merge_shoulder_ratio or 'off'}, distance {params.merge_distance_min or 'off'} min"
     )
+    print(f"Clip      : {params.clip_window_frac or 'off'}")
+    print(f"Split     : {args.split_mode}")
     print(f"Output    : {args.outdir}/")
 
     for label, filepaths in batches:
-        _run_batch(label, filepaths, params, args.outdir, args.align_tol, args.plot)
+        _run_batch(
+            label, filepaths, params, args.outdir, args.align_tol, args.plot, args.split_mode
+        )
 
     print("\nDone.")
 
