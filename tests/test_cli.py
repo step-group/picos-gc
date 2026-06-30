@@ -77,3 +77,51 @@ def test_main_end_to_end_writes_csv(example_gcd, tmp_path):
     # At least one detected-peak data row for the file.
     data = [r for r in rows[1:] if r and r[1] != ""]
     assert len(data) >= 1
+
+
+def test_baseline_defaults_to_arpls(example_gcd, tmp_path, monkeypatch):
+    import picos_gc.cli as cli
+
+    captured = {}
+
+    def fake_run_batch(
+        label,
+        filepaths,
+        params,
+        output_base,
+        align_tol,
+        plot,
+        split_mode="valley",
+        baseline_method=None,
+        baseline_lam=None,
+    ):
+        captured["method"] = baseline_method
+        captured["lam"] = baseline_lam
+
+    monkeypatch.setattr(cli, "_run_batch", fake_run_batch)
+    main([str(example_gcd), "--outdir", str(tmp_path)])
+    assert captured["method"] == "arpls"
+    assert captured["lam"] is None
+
+
+def test_baseline_none_disables(example_gcd, tmp_path, monkeypatch):
+    import picos_gc.cli as cli
+
+    captured = {}
+
+    def fake_run_batch(
+        label,
+        filepaths,
+        params,
+        output_base,
+        align_tol,
+        plot,
+        split_mode="valley",
+        baseline_method=None,
+        baseline_lam=None,
+    ):
+        captured["method"] = baseline_method
+
+    monkeypatch.setattr(cli, "_run_batch", fake_run_batch)
+    main([str(example_gcd), "--baseline", "none", "--outdir", str(tmp_path)])
+    assert captured["method"] is None

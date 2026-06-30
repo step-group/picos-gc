@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 
 from .aligner import AlignmentResult, align_peaks, save_aligned_csv
+from .baseline import ALLOWED_METHODS
 from .detector import DetectionParams
 from .processor import FileResult, process_batch, save_csv
 from .reader import time_to_index
@@ -153,6 +154,8 @@ def _run_batch(
     align_tol: float,
     plot: bool,
     split_mode: str = "valley",
+    baseline_method: str | None = None,
+    baseline_lam: float | None = None,
 ) -> None:
     """Run the full pipeline for one batch and save all outputs."""
     out_dir = output_base / label
@@ -163,7 +166,13 @@ def _run_batch(
     print(f"BATCH: {label}  ({len(filepaths)} files)")
     print("=" * 75)
 
-    results = process_batch(filepaths, params, split_mode=split_mode)
+    results = process_batch(
+        filepaths,
+        params,
+        split_mode=split_mode,
+        baseline_method=baseline_method,
+        baseline_lam=baseline_lam,
+    )
     _print_summary(results)
 
     save_csv(results, csv_path)
@@ -295,6 +304,20 @@ def main(argv: list[str] | None = None) -> None:
         help="retention time tolerance (min) for cross-file peak alignment (default: 0.1; 0 = skip)",
     )
     parser.add_argument(
+        "--baseline",
+        metavar="METHOD",
+        choices=("none", *ALLOWED_METHODS),
+        default="arpls",
+        help="global baseline correction before detection (default: arpls; 'none' = off)",
+    )
+    parser.add_argument(
+        "--baseline-lam",
+        metavar="FLOAT",
+        type=float,
+        default=None,
+        help="penalty strength (lam) for asls/airpls/arpls (default: method's own; ignored by snip)",
+    )
+    parser.add_argument(
         "--plot",
         action="store_true",
         help="save a <name>_peaks.png per file (requires matplotlib)",
@@ -321,6 +344,8 @@ def main(argv: list[str] | None = None) -> None:
     if not batches:
         print("ERROR: no .gcd files found in the given paths.", file=sys.stderr)
         sys.exit(1)
+
+    baseline_method = None if args.baseline == "none" else args.baseline
 
     params = DetectionParams(
         min_height=args.height,
@@ -352,11 +377,20 @@ def main(argv: list[str] | None = None) -> None:
     )
     print(f"Clip      : {params.clip_window_frac or 'off'}")
     print(f"Split     : {args.split_mode}")
+    print(f"Baseline  : {baseline_method or 'off'}")
     print(f"Output    : {args.outdir}/")
 
     for label, filepaths in batches:
         _run_batch(
-            label, filepaths, params, args.outdir, args.align_tol, args.plot, args.split_mode
+            label,
+            filepaths,
+            params,
+            args.outdir,
+            args.align_tol,
+            args.plot,
+            args.split_mode,
+            baseline_method,
+            args.baseline_lam,
         )
 
     print("\nDone.")
