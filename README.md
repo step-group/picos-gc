@@ -76,7 +76,9 @@ usage: picos-gc [-h] [--height FLOAT] [--prominence FLOAT] [--distance INT]
                 [--outdir DIR] [--min-width FLOAT] [--smooth-window INT]
                 [--smooth-polyorder INT] [--merge-ratio FLOAT]
                 [--merge-distance FLOAT] [--clip-frac FLOAT]
-                [--split-mode {valley,drop}] [--align-tol FLOAT] [--plot]
+                [--split-mode {valley,drop}]
+                [--baseline {none,asls,airpls,arpls,snip}] [--baseline-lam FLOAT]
+                [--align-tol FLOAT] [--plot]
                 FILES_OR_DIRS ...
 ```
 
@@ -93,8 +95,29 @@ usage: picos-gc [-h] [--height FLOAT] [--prominence FLOAT] [--distance INT]
 | `--merge-distance` | 0 min | Merge adjacent peaks whose retention times are within this distance (`0` = off) |
 | `--clip-frac` | 0.001 | Clip each integration window to where the baseline-corrected signal stays above this fraction of the peak height (`0` = off, legacy wide windows) |
 | `--split-mode` | `valley` | How to integrate fused peaks: `valley` = per-peak valley-to-valley baseline; `drop` = one baseline per fused group with vertical splits at the valleys (Shimadzu-style, conserves the group total) |
+| `--baseline` | `arpls` | Global baseline correction applied before detection (`none` = off; other choices: `asls`, `airpls`, `snip`) |
+| `--baseline-lam` | method's own | Penalty strength (`lam`) for the `asls`/`airpls`/`arpls` smoothers; larger = smoother baseline. Ignored by `snip` |
 | `--align-tol` | 0.1 min | Retention time tolerance for cross-file alignment (`0` = skip) |
 | `--plot` | off | Save a `<name>_peaks.png` per file (requires `matplotlib`) |
+
+## Baseline correction
+
+By default, picos-gc subtracts a global baseline from the whole chromatogram
+**before** peak detection, using the [pybaselines](https://github.com/derb12/pybaselines)
+arPLS algorithm. This removes column bleed and slow drift that a per-peak linear
+baseline cannot follow, so both detection and integration see a flat signal.
+
+- Pass `--baseline none` to disable it, or pick another method (`asls`, `airpls`,
+  `snip`). arPLS is robust to noise and large peaks with little tuning.
+- `--baseline-lam` tunes the Whittaker smoothing for `asls`/`airpls`/`arpls`
+  (larger = smoother). The optimal value scales with sampling density, so adjust
+  it if the baseline looks over- or under-corrected. `snip` ignores it.
+
+**Reproducibility:** because correction is on by default, reported areas differ
+from runs made before this feature existed. Use `--baseline none` to reproduce
+pre-baseline results. The standalone `label_terpenos.py` script calls the
+detection/integration functions directly and does **not** apply correction
+unless it calls `correct_baseline` itself.
 
 ## How it works
 
@@ -121,7 +144,8 @@ usage: picos-gc [-h] [--height FLOAT] [--prominence FLOAT] [--distance INT]
    shared by genuinely fused peaks stay at their valley.
 7. **Integrate** — for each peak, draws a linear baseline between its boundaries,
    subtracts it, clamps negatives to zero, and integrates with the trapezoidal
-   rule (on the raw signal). With `--split-mode drop`, fused groups instead get
+   rule (on the global-baseline-corrected signal unless `--baseline none`; never
+   on the smoothed copy). With `--split-mode drop`, fused groups instead get
    one baseline across the whole group and are split vertically at the valleys,
    which conserves the group's total area.
 8. **Align** — clusters all detected peaks across files by retention time
