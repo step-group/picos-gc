@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import csv
 from collections.abc import Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from .detector import DetectionParams, detect_peaks
@@ -22,9 +22,13 @@ class FileResult:
 
 
 def process_file(
-    filepath: Path | str, params: DetectionParams, split_mode: str = "valley"
+    filepath: Path | str,
+    params: DetectionParams,
+    split_mode: str = "valley",
+    baseline_method: str | None = None,
+    baseline_lam: float | None = None,
 ) -> FileResult:
-    """Read, detect peaks, and integrate a single .gcd file."""
+    """Read, optionally baseline-correct, detect peaks, and integrate one .gcd file."""
     filepath = Path(filepath)
     filename = filepath.name
 
@@ -34,6 +38,13 @@ def process_file(
         return FileResult(filepath=filepath, filename=filename, chromatogram=None, error=str(exc))
 
     try:
+        if baseline_method is not None:
+            from .baseline import correct_baseline
+
+            corrected = correct_baseline(
+                chrom.signal_mV, chrom.time_min, method=baseline_method, lam=baseline_lam
+            )
+            chrom = replace(chrom, signal_mV=corrected)
         peak_indices = detect_peaks(chrom, params)
         peaks = integrate_all_peaks(chrom, peak_indices, split_mode=split_mode)
     except Exception as exc:
@@ -43,7 +54,11 @@ def process_file(
 
 
 def process_batch(
-    filepaths: Sequence[Path | str], params: DetectionParams, split_mode: str = "valley"
+    filepaths: Sequence[Path | str],
+    params: DetectionParams,
+    split_mode: str = "valley",
+    baseline_method: str | None = None,
+    baseline_lam: float | None = None,
 ) -> list[FileResult]:
     """Process a list of .gcd files and return one FileResult each.
 
@@ -52,7 +67,13 @@ def process_batch(
     results: list[FileResult] = []
     for fp in filepaths:
         fp = Path(fp)
-        result = process_file(fp, params, split_mode=split_mode)
+        result = process_file(
+            fp,
+            params,
+            split_mode=split_mode,
+            baseline_method=baseline_method,
+            baseline_lam=baseline_lam,
+        )
         if result.error:
             print(f"  ERROR  {fp.name}: {result.error}")
         else:

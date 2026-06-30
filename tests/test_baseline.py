@@ -67,3 +67,24 @@ def test_correction_end_to_end_recovers_area():
     results = integrate_all_peaks(chrom, detect_peaks(chrom, DetectionParams()))
     assert len(results) == 1
     assert results[0].area_mV_min == pytest.approx(expected, rel=0.05)
+
+
+def test_process_file_baseline_off_does_not_import_pybaselines(example_gcd):
+    import sys
+
+    sys.modules.pop("pybaselines", None)
+    from picos_gc.processor import process_file
+
+    res = process_file(example_gcd, DetectionParams())  # baseline_method defaults to None
+    assert res.error is None
+    assert "pybaselines" not in sys.modules
+
+
+def test_process_file_baseline_method_threads_through(example_gcd):
+    from picos_gc.processor import process_file
+
+    # A bad method must thread through and surface as a per-file error
+    # (caught, not raised) so one bad file never crashes the batch.
+    res = process_file(example_gcd, DetectionParams(), baseline_method="bogus")
+    assert res.error is not None
+    assert "unknown baseline method" in res.error
