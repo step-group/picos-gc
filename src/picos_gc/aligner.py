@@ -121,7 +121,7 @@ def save_aligned_csv(alignment: AlignmentResult, results: list[FileResult], outp
     """Write a wide-format CSV: one row per file, one column-pair per compound.
 
     Header:
-        filename, cmp1_tR_min, cmp1_area_mV_min, cmp2_tR_min, cmp2_area_mV_min, ...
+        sample_name, filename, cmp1_tR_min, cmp1_area_mV_min, cmp2_tR_min, cmp2_area_mV_min, ...
 
     Footer rows (after a blank line), one value per compound in its area cell:
         median_tR, tR_std, mean_area, std_area, rsd_pct, n_detected
@@ -129,7 +129,7 @@ def save_aligned_csv(alignment: AlignmentResult, results: list[FileResult], outp
     output = Path(output)
     n = len(alignment.compounds)
 
-    header = ["filename"]
+    header = ["sample_name", "filename"]
     for c in alignment.compounds:
         header += [f"cmp{c.compound_id}_tR_min", f"cmp{c.compound_id}_area_mV_min"]
 
@@ -139,7 +139,7 @@ def save_aligned_csv(alignment: AlignmentResult, results: list[FileResult], outp
 
         for i, r in enumerate(results):
             row_vals = alignment.table.get(i, [(None, None)] * n)
-            row = [r.filename]
+            row = [r.sample_name or "", r.filename]
             for tR, area in row_vals:
                 row.append(f"{tR:.4f}" if tR is not None else "")
                 row.append(f"{area:.4f}" if area is not None else "")
@@ -155,7 +155,7 @@ def save_aligned_csv(alignment: AlignmentResult, results: list[FileResult], outp
             ("rsd_pct", lambda c: f"{c.rsd_pct:.2f}"),
             ("n_detected", lambda c: str(c.n_detected)),
         ]:
-            row = [label]
+            row = [label, ""]
             for c in alignment.compounds:
                 row += ["", getter(c)]  # blank tR cell, value in area cell
             writer.writerow(row)

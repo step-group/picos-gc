@@ -92,10 +92,11 @@ def test_save_aligned_csv_roundtrip(tmp_path):
     save_aligned_csv(al, results, out)
     rows = list(csv.reader(out.open()))
     header = rows[0]
-    assert header[0] == "filename"
+    assert header[0] == "sample_name"
+    assert header[1] == "filename"
     assert "cmp1_tR_min" in header and "cmp1_area_mV_min" in header
-    # Data rows for both files exist.
-    data_filenames = {r[0] for r in rows[1:] if r and r[0] in {"a.gcd", "b.gcd"}}
+    # Data rows for both files exist (filename now at index 1).
+    data_filenames = {r[1] for r in rows[1:] if len(r) > 1 and r[1] in {"a.gcd", "b.gcd"}}
     assert data_filenames == {"a.gcd", "b.gcd"}
     # Footer labels present.
     labels = {r[0] for r in rows if r}
