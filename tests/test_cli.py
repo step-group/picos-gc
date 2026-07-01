@@ -66,6 +66,7 @@ def test_main_end_to_end_writes_csv(example_gcd, tmp_path):
     assert csv_path.exists()
     rows = list(csv.reader(csv_path.open()))
     assert rows[0] == [
+        "sample_name",
         "filename",
         "peak_n",
         "tR_min",
@@ -74,8 +75,8 @@ def test_main_end_to_end_writes_csv(example_gcd, tmp_path):
         "left_min",
         "right_min",
     ]
-    # At least one detected-peak data row for the file.
-    data = [r for r in rows[1:] if r and r[1] != ""]
+    # At least one detected-peak data row for the file (peak_n now at index 2).
+    data = [r for r in rows[1:] if r and r[2] != ""]
     assert len(data) >= 1
 
 

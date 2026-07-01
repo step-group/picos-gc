@@ -19,6 +19,7 @@ class FileResult:
     chromatogram: Chromatogram | None
     peaks: list[PeakResult] = field(default_factory=list)
     error: str | None = None
+    sample_name: str | None = None
 
 
 def process_file(
@@ -37,6 +38,8 @@ def process_file(
     except ValueError as exc:
         return FileResult(filepath=filepath, filename=filename, chromatogram=None, error=str(exc))
 
+    sample_name = chrom.sample_name
+
     try:
         if baseline_method is not None:
             from .baseline import correct_baseline
@@ -48,9 +51,21 @@ def process_file(
         peak_indices = detect_peaks(chrom, params)
         peaks = integrate_all_peaks(chrom, peak_indices, split_mode=split_mode)
     except Exception as exc:
-        return FileResult(filepath=filepath, filename=filename, chromatogram=chrom, error=str(exc))
+        return FileResult(
+            filepath=filepath,
+            filename=filename,
+            chromatogram=chrom,
+            error=str(exc),
+            sample_name=sample_name,
+        )
 
-    return FileResult(filepath=filepath, filename=filename, chromatogram=chrom, peaks=peaks)
+    return FileResult(
+        filepath=filepath,
+        filename=filename,
+        chromatogram=chrom,
+        peaks=peaks,
+        sample_name=sample_name,
+    )
 
 
 def process_batch(
@@ -86,7 +101,7 @@ def process_batch(
 def save_csv(results: list[FileResult], output: Path) -> None:
     """Write results to a tidy CSV (one row per peak per file).
 
-    Columns: filename, peak_n, tR_min, height_mV, area_mV_min, left_min, right_min
+    Columns: sample_name, filename, peak_n, tR_min, height_mV, area_mV_min, left_min, right_min
 
     Files with errors get a single row with empty peak columns.
     """
@@ -95,6 +110,7 @@ def save_csv(results: list[FileResult], output: Path) -> None:
         writer = csv.writer(fh)
         writer.writerow(
             [
+                "sample_name",
                 "filename",
                 "peak_n",
                 "tR_min",
@@ -106,11 +122,12 @@ def save_csv(results: list[FileResult], output: Path) -> None:
         )
         for result in results:
             if result.error or not result.peaks:
-                writer.writerow([result.filename, "", "", "", "", "", ""])
+                writer.writerow([result.sample_name or "", result.filename, "", "", "", "", "", ""])
             else:
                 for peak in result.peaks:
                     writer.writerow(
                         [
+                            result.sample_name or "",
                             result.filename,
                             peak.peak_number,
                             f"{peak.time_min:.4f}",
