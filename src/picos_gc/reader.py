@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import binascii
+import re
 import struct
 from dataclasses import dataclass
 from pathlib import Path
@@ -15,6 +17,28 @@ class Chromatogram:
     filepath: Path
     time_min: np.ndarray  # shape (n,)
     signal_mV: np.ndarray  # shape (n,)
+    sample_name: str | None = None  # operator-entered Shimadzu sample name, if present
+
+
+_SMPL_NAME_RE = re.compile(rb"<smpl_name>([^<]*)</smpl_name>")
+
+
+def _extract_sample_name(file_property: bytes) -> str | None:
+    """Pull the operator-entered sample name from a .gcd 'File Property' stream.
+
+    Shimadzu stores the value as '@StoX@<hex>' ("store as heX"); decode it.
+    Returns None if the tag is absent, empty, or the hex is undecodable.
+    """
+    m = _SMPL_NAME_RE.search(file_property)
+    if not m:
+        return None
+    raw = m.group(1)
+    if raw.startswith(b"@StoX@"):
+        try:
+            raw = binascii.unhexlify(raw[6:])
+        except binascii.Error:
+            return None
+    return raw.decode("latin-1").strip() or None
 
 
 def read_gcd(filepath: Path | str) -> Chromatogram:
@@ -64,6 +88,14 @@ def read_gcd(filepath: Path | str) -> Chromatogram:
         except struct.error as exc:
             raise ValueError(f"Cannot parse total time in '{filepath}'") from exc
 
+        # Best-effort: the sample name the operator typed in LabSolutions.
+        sample_name = None
+        try:
+            if ole.exists("File Property"):
+                sample_name = _extract_sample_name(ole.openstream("File Property").read())
+        except Exception:  # metadata is optional, never fail the read
+            sample_name = None
+
     except ValueError:
         raise
     except Exception as exc:
@@ -74,7 +106,12 @@ def read_gcd(filepath: Path | str) -> Chromatogram:
     time_min = np.linspace(0, total_ms / 60000.0, n_points)
     signal_mV = signal_uV / 1000.0
 
-    return Chromatogram(filepath=filepath, time_min=time_min, signal_mV=signal_mV)
+    return Chromatogram(
+        filepath=filepath,
+        time_min=time_min,
+        signal_mV=signal_mV,
+        sample_name=sample_name,
+    )
 
 
 def time_to_index(chrom: Chromatogram, t: float) -> int:

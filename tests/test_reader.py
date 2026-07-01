@@ -72,3 +72,34 @@ def test_data_starts_at_offset_24_not_16(example_gcd):
     # The reader must surface the real first sample, not the padding zero.
     assert chrom.signal_mV[0] != 0.0
     assert chrom.signal_mV[0] * 1000.0 == pytest.approx(first_raw_sample_uV)
+
+
+def test_extract_sample_name_decodes_stox():
+    from picos_gc.reader import _extract_sample_name
+
+    # 49315F5431 == "I1_T1"
+    stream = b"junk<smpl_name>@StoX@49315F5431</smpl_name>junk"
+    assert _extract_sample_name(stream) == "I1_T1"
+
+
+def test_extract_sample_name_plain_value():
+    from picos_gc.reader import _extract_sample_name
+
+    assert _extract_sample_name(b"<smpl_name>BNK001</smpl_name>") == "BNK001"
+
+
+def test_extract_sample_name_empty_is_none():
+    from picos_gc.reader import _extract_sample_name
+
+    assert _extract_sample_name(b"<smpl_name>@StoX@</smpl_name>") is None
+
+
+def test_extract_sample_name_missing_is_none():
+    from picos_gc.reader import _extract_sample_name
+
+    assert _extract_sample_name(b"<other>x</other>") is None
+
+
+def test_chromatogram_sample_name_defaults_none():
+    chrom = make_chrom(np.zeros(10))
+    assert chrom.sample_name is None
