@@ -129,12 +129,12 @@ def sample_key(name: str) -> str:
 def sample_label(chrom) -> str:
     """Embedded Shimadzu sample name, or 'BLANK' for blank/wash injections.
 
-    Blanks are named 'BNK...'; downstream code drops 'BLANK' from the merged
-    and Excel outputs. ponytail: broaden the blank test if other blank prefixes
-    appear.
+    Blanks are named 'BNK...' (most batches) or 'Blanco' (block A); downstream
+    code drops 'BLANK' from the merged and Excel outputs. ponytail: extend the
+    prefix tuple if another blank naming shows up.
     """
     nm = chrom.sample_name
-    return "BLANK" if not nm or nm.upper().startswith("BNK") else nm
+    return "BLANK" if not nm or nm.upper().startswith(("BNK", "BLAN")) else nm
 
 
 def in_window(tr: float, w: tuple[float, float]) -> bool:

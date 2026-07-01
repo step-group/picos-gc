@@ -27,5 +27,10 @@ def test_sample_label_blank_for_bnk():
     assert sample_label(_chrom("BNK001")) == "BLANK"
 
 
+def test_sample_label_blank_for_blanco():
+    # block A names its blank "Blanco" (Spanish), not BNK*
+    assert sample_label(_chrom("Blanco")) == "BLANK"
+
+
 def test_sample_label_blank_for_missing():
     assert sample_label(_chrom(None)) == "BLANK"
