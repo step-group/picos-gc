@@ -61,10 +61,10 @@ Results are written under `<outdir>/<batch-label>/` (default `out/`):
 | `<name>_peaks.png` | Chromatogram with shaded peak areas (requires `--plot`) |
 
 ### Tidy CSV columns
-`filename, peak_n, tR_min, height_mV, area_mV_min, left_min, right_min`
+`sample_name, filename, peak_n, tR_min, height_mV, area_mV_min, left_min, right_min`
 
 ### Aligned CSV columns
-`filename, cmp1_tR_min, cmp1_area_mV_min, cmp2_tR_min, cmp2_area_mV_min, ...`
+`sample_name, filename, cmp1_tR_min, cmp1_area_mV_min, cmp2_tR_min, cmp2_area_mV_min, ...`
 
 Footer rows (one value per compound, in the area cell): `median_tR`, `tR_std`,
 `mean_area`, `std_area`, `rsd_pct`, `n_detected`.
@@ -72,7 +72,8 @@ Footer rows (one value per compound, in the area cell): `median_tR`, `tR_std`,
 ## CLI reference
 
 ```
-usage: picos-gc [-h] [--height FLOAT] [--prominence FLOAT] [--distance INT]
+usage: picos-gc [-h] [--height FLOAT] [--prominence FLOAT]
+                [--height-snr FLOAT] [--prominence-snr FLOAT] [--distance INT]
                 [--outdir DIR] [--min-width FLOAT] [--smooth-window INT]
                 [--smooth-polyorder INT] [--merge-ratio FLOAT]
                 [--merge-distance FLOAT] [--clip-frac FLOAT]
@@ -84,8 +85,10 @@ usage: picos-gc [-h] [--height FLOAT] [--prominence FLOAT] [--distance INT]
 
 | Option | Default | Description |
 |---|---|---|
-| `--height` | 50 mV | Minimum peak height for detection |
-| `--prominence` | 20 mV | Minimum peak prominence |
+| `--height` | auto | Minimum peak height. Default: auto = `--height-snr` × the measured noise σ (robust MAD on the baseline-corrected signal). Pass a number to force a fixed mV cut (e.g. `--height 50` for the pre-auto behaviour) |
+| `--prominence` | auto | Minimum peak prominence. Default: auto = `--prominence-snr` × noise σ |
+| `--height-snr` | 10 | Auto height in noise-σ units (limit-of-quantitation ≈ 10σ). Used only when `--height` is unset |
+| `--prominence-snr` | 5 | Auto prominence in noise-σ units. Used only when `--prominence` is unset |
 | `--distance` | 50 pts | Minimum separation between peaks |
 | `--outdir` | `out` | Base output directory |
 | `--min-width` | 0.03 min | Minimum peak width (`0` = off) |
@@ -122,12 +125,17 @@ unless it calls `correct_baseline` itself.
 ## How it works
 
 1. **Read** — parses the OLE2 binary stream in the `.gcd` file to extract time
-   (min) and signal (mV).
+   (min), signal (mV), and the operator-entered sample name (`File Property` →
+   `smpl_name`).
 2. **Smooth (optional)** — when `--smooth-window` > 0, a Savitzky-Golay filter is
    applied to a *copy* of the signal for detection only; integration always uses
    the raw signal, so smoothing never changes reported areas. Off by default.
 3. **Detect** — `scipy.signal.find_peaks` with height, prominence, distance, and
-   width thresholds; falls back to looser thresholds if nothing is found.
+   width thresholds. By default height/prominence are **auto**: the robust noise σ
+   (Gaussian-scaled MAD of the baseline-corrected signal, `estimate_noise`) is
+   measured per file and the thresholds are set to `10σ` / `5σ`, so detection adapts
+   to each run's noise instead of a fixed mV constant. Falls back to looser fixed
+   thresholds if nothing is found.
 4. **Bound** — `peak_widths` at `rel_height=1.0` places each integration boundary
    at the prominence reference level (the local valley floor), with a
    valley-clipping safety net for any boundaries that still overlap.
