@@ -11,6 +11,8 @@ fills every block, and replaces the stale 363.58 2PhEt value in E/F/H/I with 187
 
 Prereq: `uv run python label_terpenos.py` has produced out/<batch>/merged_samples.csv.
 Run:    uv run --with openpyxl python fill_ternarios.py
+        (also shells out to pcsaft-quaternary/plot_experimental_tielines.py at the
+        end, so the ternary diagrams under out/tielines/ are regenerated in one go)
 """
 
 from __future__ import annotations
@@ -411,6 +413,25 @@ def recalc_workbook(path: Path, warn: list[str]) -> None:
             )
 
 
+def run_tieline_plots(warn: list[str]) -> None:
+    """Run the pcsaft-quaternary tie-line plotter on the CSV we just wrote. It lives
+    in a separate uv project (its venv has python-ternary/matplotlib, which this one
+    does not), so shell out with `uv run` in that dir rather than importing it."""
+    plot_dir = Path(__file__).parent / "pcsaft-quaternary"
+    if not (plot_dir / "plot_experimental_tielines.py").exists():
+        warn.append(f"tie-line plotter not found under {plot_dir}")
+        return
+    r = subprocess.run(
+        ["uv", "run", "python", "plot_experimental_tielines.py"],
+        cwd=plot_dir,
+        capture_output=True,
+        text=True,
+    )
+    print(r.stdout, end="")
+    if r.returncode != 0:
+        warn.append(f"tie-line plotting failed: {r.stderr.strip()[:200]}")
+
+
 def main() -> None:
     cc = cc_mf_slopes(CC_MF)
     wb = openpyxl.load_workbook(WB_IN, data_only=False)  # keep formulas (write target)
@@ -462,6 +483,7 @@ def main() -> None:
         )
         w.writerows(all_rows)
     print(f"\nWrote {WB_OUT}\nWrote {OUT_CSV}")
+    run_tieline_plots(warn)
     if warn:
         print("\nWARNINGS:")
         for m in warn:
