@@ -209,6 +209,7 @@ def fill_block(
             ws[f"N{row}"] = a[hbd_key]
         recs.append(
             {
+                "row": row,
                 "sysnum": sysnum,
                 "ph": ph,
                 "phase": phase,
@@ -330,6 +331,13 @@ def results_rows(ws, block: str, recs: list[dict]) -> list[list]:
         else:
             norm = [None, None, None, None]
             flags.append("incomplete")
+        # Write the final point straight into AD..AG as static values so the workbook
+        # matches this CSV. The in-sheet formulas average the phase's rows and can't
+        # express the per-vial mixup drop (e.g. E2), so they'd otherwise show a phantom.
+        if norm[0] is not None:
+            anchor = min(r["row"] for r in g)
+            for col, val in zip(("AD", "AE", "AF", "AG"), norm):
+                ws[f"{col}{anchor}"] = val
         out.append(
             [
                 block,
@@ -366,13 +374,10 @@ PER_PHASE = {  # on the first row r of each (system, phase) pair; averages rows 
     "X": "=AVERAGE(S{r}:S{s})/100",  # mean fraction over reps
     "Y": "=AVERAGE(T{r}:T{s})/100",
     "Z": "=AVERAGE(U{r}:V{s})/100",  # Z = KF water
-    "AA": "=SUM(W{r}:Z{r})",  # closure (≈1)
-    # Water-poor (organic, Z<0.5) phase: KF-anchor water, split rest by GC ratio.
-    # Water-rich phase: proportional (÷AA). Matches results_rows / ORGANIC_WATER_MAX.
-    "AD": "=IF((W{r}+X{r}+Y{r})=0,0,IF(Z{r}<0.5,W{r}*(1-Z{r})/(W{r}+X{r}+Y{r}),W{r}/AA{r}))",
-    "AE": "=IF((W{r}+X{r}+Y{r})=0,0,IF(Z{r}<0.5,X{r}*(1-Z{r})/(W{r}+X{r}+Y{r}),X{r}/AA{r}))",
-    "AF": "=IF((W{r}+X{r}+Y{r})=0,0,IF(Z{r}<0.5,Y{r}*(1-Z{r})/(W{r}+X{r}+Y{r}),Y{r}/AA{r}))",
-    "AG": "=IF(Z{r}<0.5,Z{r},Z{r}/AA{r})",
+    "AA": "=SUM(W{r}:Z{r})",  # raw closure (≈1); flags a bad phase even after a drop
+    # AD..AG (the normalized ternary point) are NOT formulas: results_rows writes them
+    # as static values so the workbook matches the CSV. In-sheet formulas would average
+    # both replicate rows and so can't express the per-vial mixup drop (e.g. E2).
 }
 
 
