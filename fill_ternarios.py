@@ -53,6 +53,7 @@ CODE_RE = re.compile(r"(\d+)[-_ ]?([TB])([12])\s*$", re.I)
 CLOSURE_BAND = (0.5, 1.5)
 MISMATCH_MAX = 3.0
 MISMATCH_MIN_FRAC = 0.1  # only judge mismatch on a real constituent, not trace wobble
+ORGANIC_WATER_MAX = 0.5  # KF anchor only the water-poor (organic) phase; see results_rows
 
 
 def parse_key(code: str) -> tuple[int, str, int] | None:
@@ -288,7 +289,17 @@ def results_rows(ws, block: str, recs: list[dict]) -> list[list]:
         flags = [] if (g2 and h2) else ["slopes_missing"]
         closure = None
         if None not in (w, x, y, z):
-            norm, closure = kf_anchor(w, x, y, z)
+            closure = w + x + y + z
+            if z < ORGANIC_WATER_MAX:
+                # Water-poor (organic) phase: KF titrates its small water content
+                # reliably, so anchor it and split the rest by GC ratio — this fixes the
+                # closure-inflated D1/I1 curve. Water-rich phases keep proportional
+                # normalisation (KF is the bulk there; the trace dissolved species come
+                # straight from GC rather than being forced to close mass balance).
+                norm, _ = kf_anchor(w, x, y, z)
+            else:
+                tot = closure if closure > 0 else 1.0
+                norm = [w / tot, x / tot, y / tot, z / tot]
             lo, hi = CLOSURE_BAND
             if not (lo <= closure <= hi):
                 flags.append("low_closure")
@@ -334,10 +345,12 @@ PER_PHASE = {  # on the first row r of each (system, phase) pair; averages rows 
     "Y": "=AVERAGE(T{r}:T{s})/100",
     "Z": "=AVERAGE(U{r}:V{s})/100",  # Z = KF water
     "AA": "=SUM(W{r}:Z{r})",  # closure (≈1)
-    "AD": "=IF((W{r}+X{r}+Y{r})=0,0,W{r}*(1-Z{r})/(W{r}+X{r}+Y{r}))",
-    "AE": "=IF((W{r}+X{r}+Y{r})=0,0,X{r}*(1-Z{r})/(W{r}+X{r}+Y{r}))",  # KF-anchored point
-    "AF": "=IF((W{r}+X{r}+Y{r})=0,0,Y{r}*(1-Z{r})/(W{r}+X{r}+Y{r}))",
-    "AG": "=Z{r}",  # water fixed at the KF assay, remainder split by GC ratio
+    # Water-poor (organic, Z<0.5) phase: KF-anchor water, split rest by GC ratio.
+    # Water-rich phase: proportional (÷AA). Matches results_rows / ORGANIC_WATER_MAX.
+    "AD": "=IF((W{r}+X{r}+Y{r})=0,0,IF(Z{r}<0.5,W{r}*(1-Z{r})/(W{r}+X{r}+Y{r}),W{r}/AA{r}))",
+    "AE": "=IF((W{r}+X{r}+Y{r})=0,0,IF(Z{r}<0.5,X{r}*(1-Z{r})/(W{r}+X{r}+Y{r}),X{r}/AA{r}))",
+    "AF": "=IF((W{r}+X{r}+Y{r})=0,0,IF(Z{r}<0.5,Y{r}*(1-Z{r})/(W{r}+X{r}+Y{r}),Y{r}/AA{r}))",
+    "AG": "=IF(Z{r}<0.5,Z{r},Z{r}/AA{r})",
 }
 
 
