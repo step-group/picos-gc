@@ -115,3 +115,52 @@ def test_split_mode_validation():
     chrom = make_chrom(np.zeros(100))
     with pytest.raises(ValueError, match="split_mode"):
         integrate_all_peaks(chrom, [], split_mode="bogus")
+
+
+def test_deconvolve_isolated_equals_drop():
+    # Isolated peaks are integrated exactly as drop mode (no fitting).
+    t = np.linspace(0, 10, 20000)
+    sig = gaussian(t, 3.0, 1000, 0.05) + gaussian(t, 7.0, 800, 0.05)
+    chrom = make_chrom(sig)
+    detected = detect_peaks(chrom, DetectionParams(merge_shoulder_ratio=0.0))
+    drop = integrate_all_peaks(chrom, detected, split_mode="drop")
+    deconv = integrate_all_peaks(chrom, detected, split_mode="deconvolve")
+    for d, x in zip(drop, deconv, strict=True):
+        assert x.area_mV_min == pytest.approx(d.area_mV_min, rel=1e-9)
+
+
+def test_deconvolve_beats_drop_on_tailing_overlap():
+    # A small peak riding the TAIL of a large tailing peak: drop's vertical split
+    # hands the big peak's tail to the small one (over-estimate); EMG recovers it.
+    # The pair is a hand-built fused group so the test targets the integrator's
+    # deconvolve branch, not detector tuning.
+    from picos_gc.deconvolution import emg
+
+    t = np.linspace(8.5, 9.8, 40000)
+    a_big, a_small = 50.0, 2.0
+    mu_big, mu_small = 9.0, 9.20
+    sigma, tau = 0.02, 0.05  # pronounced tail on the big peak
+    sig = emg(t, a_big, mu_big, sigma, tau) + emg(t, a_small, mu_small, sigma, tau)
+    chrom = make_chrom(sig, t_start=8.5, t_end=9.8)
+
+    i_big = int(np.argmin(np.abs(t - mu_big)))
+    i_small = int(np.argmin(np.abs(t - mu_small)))
+    valley = i_big + int(np.argmin(sig[i_big : i_small + 1]))  # shared boundary
+    detected = [
+        DetectedPeak(index=i_big, left_base=0, right_base=valley),
+        DetectedPeak(index=i_small, left_base=valley, right_base=len(t) - 1),
+    ]
+
+    drop = integrate_all_peaks(chrom, detected, split_mode="drop")
+    deconv = integrate_all_peaks(chrom, detected, split_mode="deconvolve")
+
+    drop_small = drop[1].area_mV_min
+    deconv_small = deconv[1].area_mV_min
+    assert abs(deconv_small - a_small) < abs(drop_small - a_small)  # closer to truth
+    assert deconv_small == pytest.approx(a_small, rel=0.15)
+
+
+def test_deconvolve_mode_is_valid():
+    chrom = make_chrom(np.zeros(100))
+    # empty peak list is a no-op in any valid mode (must not raise)
+    assert integrate_all_peaks(chrom, [], split_mode="deconvolve") == []

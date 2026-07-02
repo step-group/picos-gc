@@ -7,6 +7,7 @@ from dataclasses import dataclass
 import numpy as np
 from scipy.integrate import trapezoid
 
+from .deconvolution import deconvolve_group
 from .detector import DetectedPeak
 from .reader import Chromatogram
 
@@ -91,10 +92,15 @@ def integrate_all_peaks(
         fused pairs because the baseline rises to the valley.
       - "drop": one baseline across each fused group, areas split vertically
         at the valleys (perpendicular drop). Conserves the group's total area.
-    Isolated peaks are identical in both modes.
+      - "deconvolve": fit each fused group to a sum of exponentially-modified
+        Gaussians and report each component's closed-form area; isolated peaks
+        and any group whose fit fails fall back to "drop".
+    Isolated peaks are identical in all modes.
     """
-    if split_mode not in ("valley", "drop"):
-        raise ValueError(f"split_mode must be 'valley' or 'drop', got {split_mode!r}")
+    if split_mode not in ("valley", "drop", "deconvolve"):
+        raise ValueError(
+            f"split_mode must be 'valley', 'drop' or 'deconvolve', got {split_mode!r}"
+        )
 
     areas: list[float] = []
     if split_mode == "valley":
@@ -102,9 +108,19 @@ def integrate_all_peaks(
             integrate_peak(chrom.time_min, chrom.signal_mV, dp.index, dp.left_base, dp.right_base)
             for dp in detected
         ]
-    else:
+    elif split_mode == "drop":
         for group in _fused_groups(detected):
             areas.extend(_integrate_drop(chrom.time_min, chrom.signal_mV, group))
+    else:  # deconvolve: fit fused groups to an EMG sum; isolated peaks use drop.
+        for group in _fused_groups(detected):
+            if len(group) < 2:
+                areas.extend(_integrate_drop(chrom.time_min, chrom.signal_mV, group))
+                continue
+            fitted, _r2 = deconvolve_group(chrom.time_min, chrom.signal_mV, group)
+            if fitted is None:  # non-convergence / poor / blown-up fit -> drop
+                areas.extend(_integrate_drop(chrom.time_min, chrom.signal_mV, group))
+            else:
+                areas.extend(fitted)
 
     results: list[PeakResult] = []
     for number, (dp, area) in enumerate(zip(detected, areas, strict=True), start=1):
