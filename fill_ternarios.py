@@ -207,6 +207,12 @@ def fill_block(
             ws[f"M{row}"] = a[hba_key]
         if hbd_key in a:
             ws[f"N{row}"] = a[hbd_key]
+        # Dilution from the raw weighings — I ("Muestra, g") = F-D, K ("Mue+Met") = H-D —
+        # rather than the sheet's cached I/K *formulas*. data_only reads a formula's last
+        # cached value, which is stale if a mass is edited without an Excel recalc; the
+        # raw D/F/H cells are always live. Verified F-D/H-D == the I/K formulas in every
+        # block (160/160 rows). KF (U/V) and areas (L/M/N) are already raw/live.
+        d, fg, hg = _num(ws_d, f"D{row}"), _num(ws_d, f"F{row}"), _num(ws_d, f"H{row}")
         recs.append(
             {
                 "row": row,
@@ -216,8 +222,8 @@ def fill_block(
                 "L": a.get("2pe"),
                 "M": a.get(hba_key),
                 "N": a.get(hbd_key),
-                "I": _num(ws_d, f"I{row}"),
-                "K": _num(ws_d, f"K{row}"),
+                "I": (fg - d) if (fg is not None and d is not None) else None,
+                "K": (hg - d) if (hg is not None and d is not None) else None,
                 "U": _num(ws_d, f"U{row}"),
                 "V": _num(ws_d, f"V{row}"),
             }
