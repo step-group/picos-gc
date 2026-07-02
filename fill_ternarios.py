@@ -1,3 +1,7 @@
+# /// script
+# requires-python = ">=3.11"
+# dependencies = ["openpyxl"]
+# ///
 """Fill `Sistemas ternarios_MF.xlsx` with picos-gc peak areas + emit a results CSV.
 
 Each sheet `Bloque A..I` is a pseudoternary LLE workbook: Water + 2-phenylethanol
@@ -10,7 +14,8 @@ point + E1..E5 — including SM reproduces the workbook's own slopes exactly). T
 fills every block, and replaces the stale 363.58 2PhEt value in E/F/H/I with 187.31.
 
 Prereq: `uv run python label_terpenos.py` has produced out/<batch>/merged_samples.csv.
-Run:    uv run --with openpyxl python fill_ternarios.py
+Run:    uv run fill_ternarios.py   (PEP 723 header pulls openpyxl; paths are
+        script-relative, so it works from any directory)
         (also shells out to pcsaft-quaternary/plot_experimental_tielines.py at the
         end, so the ternary diagrams under out/tielines/ are regenerated in one go)
 """
@@ -27,11 +32,12 @@ from pathlib import Path
 
 import openpyxl
 
-WB_IN = Path("Sistemas ternarios_MF.xlsx")
-WB_OUT = Path("Sistemas ternarios_MF_filled.xlsx")
-CC_MF = Path("CC_MF.xlsx")
-DATA = Path("FLECK_TERPENOS2026")
-OUT_CSV = Path("out/ternarios_resultados.csv")
+_ROOT = Path(__file__).resolve().parent  # script-relative so CWD doesn't matter
+WB_IN = _ROOT / "Sistemas ternarios_MF.xlsx"
+WB_OUT = _ROOT / "Sistemas ternarios_MF_filled.xlsx"
+CC_MF = _ROOT / "CC_MF.xlsx"
+DATA = _ROOT / "FLECK_TERPENOS2026"
+OUT_CSV = _ROOT / "out" / "ternarios_resultados.csv"
 
 TERPS = ("camph", "carvone", "carvacrol", "geraniol", "thymol", "eugenol")
 DISPLAY = {  # canon -> workbook-style name written into blank M3/N3 cells
@@ -478,7 +484,7 @@ def main() -> None:
         if not folders:
             warn.append(f"{block}: no FLECK data folder")
             continue
-        merged = Path("out") / Path(folders[0]).name / "merged_samples.csv"
+        merged = _ROOT / "out" / Path(folders[0]).name / "merged_samples.csv"
         if not merged.exists():
             warn.append(f"{block}: {merged} missing - run label_terpenos.py")
             continue
@@ -531,7 +537,7 @@ def _selfcheck() -> None:
         ("geraniol", 166.2694),
     ):
         assert abs(s[comp] - expect) < 0.05, f"{comp}: {s[comp]} != {expect}"
-    a = load_vial_areas(Path("out/A1T1 AL A5B2/merged_samples.csv"))
+    a = load_vial_areas(_ROOT / "out" / "A1T1 AL A5B2" / "merged_samples.csv")
     assert abs(a[(1, "T", 1)]["2pe"] - 143.81) < 1, a[(1, "T", 1)]
     assert canon("2PE") == "2pe" and canon("DL-Camphor") == "camphor", "canon broken"
     assert parse_key("BM1-T1") == (1, "T", 1) and parse_key("E3_B2") == (3, "B", 2), "parse_key"
