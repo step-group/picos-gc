@@ -126,3 +126,26 @@ def test_baseline_none_disables(example_gcd, tmp_path, monkeypatch):
     monkeypatch.setattr(cli, "_run_batch", fake_run_batch)
     main([str(example_gcd), "--baseline", "none", "--outdir", str(tmp_path)])
     assert captured["method"] is None
+
+
+def test_cli_accepts_deconvolve_split_mode(example_gcd, tmp_path, monkeypatch):
+    import picos_gc.cli as cli
+
+    captured = {}
+
+    def fake_run_batch(
+        label,
+        filepaths,
+        params,
+        output_base,
+        align_tol,
+        plot,
+        split_mode="valley",
+        baseline_method=None,
+        baseline_lam=None,
+    ):
+        captured["split_mode"] = split_mode
+
+    monkeypatch.setattr(cli, "_run_batch", fake_run_batch)
+    main([str(example_gcd), "--split-mode", "deconvolve", "--outdir", str(tmp_path)])
+    assert captured["split_mode"] == "deconvolve"

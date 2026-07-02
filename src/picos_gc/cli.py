@@ -136,7 +136,12 @@ def _plot_file(result: FileResult, output_dir: Path) -> None:
     ax.set_ylabel("Signal (mV)")
     ax.set_title(result.filename)
     ax.legend(fontsize=7)
-    ax.set_ylim(top=ax.get_ylim()[1] * 1.2)
+    # Analytes can be ~1000x smaller than the solvent peak; on a linear axis they
+    # pin to the baseline and their tags collide. symlog lifts each peak to a
+    # distinct height so the tags separate vertically; *3 top leaves tag headroom.
+    # ponytail: linthresh=1 keeps sub-mV baseline noise in the flat linear zone.
+    ax.set_yscale("symlog", linthresh=1.0)
+    ax.set_ylim(bottom=-1.0, top=ax.get_ylim()[1] * 10)  # ~1 decade so the tallest peak's tag clears the title
     fig.tight_layout()
 
     stem = Path(result.filename).stem
@@ -210,14 +215,31 @@ def main(argv: list[str] | None = None) -> None:
         metavar="FLOAT",
         type=float,
         default=_d.min_height,
-        help=f"min peak height in mV (default: {_d.min_height})",
+        help=f"min peak height in mV (default: auto = {_d.noise_snr_height:g}sigma over noise; "
+        "pass a number to force a fixed cut)",
     )
     parser.add_argument(
         "--prominence",
         metavar="FLOAT",
         type=float,
         default=_d.min_prominence,
-        help=f"min peak prominence in mV (default: {_d.min_prominence})",
+        help=f"min peak prominence in mV (default: auto = {_d.noise_snr_prominence:g}sigma over noise)",
+    )
+    parser.add_argument(
+        "--height-snr",
+        metavar="FLOAT",
+        type=float,
+        default=_d.noise_snr_height,
+        help=f"auto height in noise-sigma units, used when --height is unset "
+        f"(default: {_d.noise_snr_height:g})",
+    )
+    parser.add_argument(
+        "--prominence-snr",
+        metavar="FLOAT",
+        type=float,
+        default=_d.noise_snr_prominence,
+        help=f"auto prominence in noise-sigma units, used when --prominence is unset "
+        f"(default: {_d.noise_snr_prominence:g})",
     )
     parser.add_argument(
         "--distance",
@@ -288,12 +310,15 @@ def main(argv: list[str] | None = None) -> None:
     )
     parser.add_argument(
         "--split-mode",
-        choices=("valley", "drop"),
+        choices=("valley", "drop", "deconvolve"),
         default="valley",
         help=(
             "how to integrate fused peaks: 'valley' = per-peak valley-to-valley "
             "baseline (default), 'drop' = one baseline per fused group with "
-            "vertical splits at the valleys (Shimadzu-style, conserves total area)"
+            "vertical splits at the valleys (Shimadzu-style, conserves total area), "
+            "'deconvolve' = fit each fused group to a sum of exponentially-modified "
+            "Gaussians and report each component's closed-form area (falls back to "
+            "'drop' when a fit fails)"
         ),
     )
     parser.add_argument(
@@ -357,14 +382,26 @@ def main(argv: list[str] | None = None) -> None:
         merge_shoulder_ratio=args.merge_ratio,
         merge_distance_min=args.merge_distance,
         clip_window_frac=args.clip_frac,
+        noise_snr_height=args.height_snr,
+        noise_snr_prominence=args.prominence_snr,
+    )
+    height_desc = (
+        f"{params.min_height} mV"
+        if params.min_height is not None
+        else f"auto ({params.noise_snr_height:g}sigma over noise)"
+    )
+    prom_desc = (
+        f"{params.min_prominence} mV"
+        if params.min_prominence is not None
+        else f"auto ({params.noise_snr_prominence:g}sigma over noise)"
     )
 
     print("=" * 75)
     print("INTEGRACION DE PEAKS - GC Shimadzu (.gcd)")
     print("=" * 75)
     print(f"Batches   : {len(batches)}")
-    print(f"Height    : {params.min_height} mV")
-    print(f"Prominence: {params.min_prominence} mV")
+    print(f"Height    : {height_desc}")
+    print(f"Prominence: {prom_desc}")
     print(f"Distance  : {params.min_distance} pts")
     smooth_desc = (
         f"{params.smooth_window} (poly {params.smooth_polyorder})"
