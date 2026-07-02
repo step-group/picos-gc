@@ -271,22 +271,40 @@ def results_rows(ws, block: str, recs: list[dict]) -> list[list]:
     for (sysnum, ph), g in sorted(groups.items()):
         system = f"{block}{sysnum}"
         phase = "Superior" if ph == "T" else "Inferior"
-        sol, hba, hbd, kf = [], [], [], []
+        # Per-vial composition (fractions) so a replicate that sampled a *different
+        # phase* than its pair can be dropped — averaging a mixed pair otherwise makes a
+        # mid-triangle phantom (E2 Superior = one genuine aqueous vial + one that read
+        # ~96% KF water yet carried a full organic terpene load).
+        vials = []
         for r in g:
             df = (r["K"] / r["I"]) if (r["K"] and r["I"]) else None
             if df is None:
                 continue
-            if f2 and r["L"] is not None:
-                sol.append(r["L"] / f2 * df)
-            if g2 and r["M"] is not None:
-                hba.append(r["M"] / g2 * df)
-            if h2 and r["N"] is not None:
-                hbd.append(r["N"] / h2 * df)
-            kf += [k for k in (r["U"], r["V"]) if k is not None]
+            s = (r["L"] / f2 * df / 100) if (f2 and r["L"] is not None) else None
+            a = (r["M"] / g2 * df / 100) if (g2 and r["M"] is not None) else None
+            b = (r["N"] / h2 * df / 100) if (h2 and r["N"] is not None) else None
+            ks = [c / 100 for c in (r["U"], r["V"]) if c is not None]
+            vials.append({"s": s, "a": a, "b": b, "kf": ks, "raw": r})
+
+        def _is_mixup(v):
+            # Majority-water AND majority-organic at once: impossible for one phase, so
+            # this vial sampled the wrong phase. (Concentrated organics close >1 but are
+            # water-poor; aqueous vials are organic-poor — neither trips this.)
+            water = sum(v["kf"]) / len(v["kf"]) if v["kf"] else 0.0
+            gc = sum(c for c in (v["s"], v["a"], v["b"]) if c is not None)
+            return water > 0.5 and gc > 0.5
+
+        keep = [v for v in vials if not _is_mixup(v)]
+        use = keep if keep else vials  # if every vial is a mixup, keep all (stays flagged)
+        dropped = 0 < len(use) < len(vials)
 
         def avg(xs):
-            return sum(xs) / len(xs) / 100 if xs else None
+            return sum(xs) / len(xs) if xs else None
 
+        sol = [v["s"] for v in use if v["s"] is not None]
+        hba = [v["a"] for v in use if v["a"] is not None]
+        hbd = [v["b"] for v in use if v["b"] is not None]
+        kf = [c for v in use for c in v["kf"]]
         w, x, y, z = avg(sol), avg(hba), avg(hbd), avg(kf)
         flags = [] if (g2 and h2) else ["slopes_missing"]
         closure = None
@@ -305,8 +323,10 @@ def results_rows(ws, block: str, recs: list[dict]) -> list[list]:
             lo, hi = CLOSURE_BAND
             if not (lo <= closure <= hi):
                 flags.append("low_closure")
-            if _replicate_mismatch(g, w, x, y) > MISMATCH_MAX:
+            if _replicate_mismatch([v["raw"] for v in use], w, x, y) > MISMATCH_MAX:
                 flags.append("replicate_mismatch")
+            if dropped:
+                flags.append("dropped_replicate")
         else:
             norm = [None, None, None, None]
             flags.append("incomplete")
@@ -322,7 +342,7 @@ def results_rows(ws, block: str, recs: list[dict]) -> list[list]:
                 _fmt(norm[2]),
                 _fmt(norm[3]),
                 _fmt(closure),
-                len(g),
+                len(use),
                 ";".join(flags),
             ]
         )
