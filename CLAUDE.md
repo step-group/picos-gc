@@ -8,10 +8,13 @@ Run: `uv run picos-gc *.gcd` (or a directory). Test: `uv run pytest`. Uses `uv`,
 - `reader.py` — OLE2 binary parsing → `Chromatogram` (also extracts `sample_name`, see below)
 - `baseline.py` — optional global baseline correction (`pybaselines`, arPLS default, on by default)
 - `detector.py` — `find_peaks` + valley-clipping → `list[DetectedPeak]`
-- `integrator.py` — linear baseline + trapezoid → `list[PeakResult]`
+- `integrator.py` — linear baseline + trapezoid → `list[PeakResult]`; `--split-mode` picks how fused peaks are split: `valley` (default), `drop` (perpendicular drop), `deconvolve` (see below)
+- `deconvolution.py` — EMG (exponentially-modified Gaussian) curve-fit for fused peak groups; `integrator` uses it for `--split-mode deconvolve` (fits N≥2 groups, falls back to `drop` on any fit failure; isolated peaks unchanged, so only fused-group `area_mV_min` differs)
 - `processor.py` — batch pipeline → `list[FileResult]` + tidy `save_csv`
 - `aligner.py` — cross-file tR clustering → wide `save_aligned_csv`
 - `cli.py` — argparse entry; defaults from `DetectionParams()`
+
+Deconvolution impact on real data (`deconv_impact.py`, repo root) is small: quantified analytes are well-resolved, so sizable peaks (area ≥ 1) move <~23% only for a handful of fused shoulders and the giant solvent peak — quantified terpene/2PE areas barely change. Run: `uv run python deconv_impact.py <dir>`.
 
 ## `.gcd` metadata: sample name
 The operator-entered sample name lives in the OLE2 `File Property` stream as
