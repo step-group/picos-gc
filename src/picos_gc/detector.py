@@ -7,18 +7,38 @@ from dataclasses import dataclass
 
 import numpy as np
 from scipy.signal import find_peaks, peak_widths, savgol_filter
+from scipy.stats import median_abs_deviation
 
 from .reader import Chromatogram
 
-# Looser thresholds used only if the supplied params find nothing at all.
+# Looser thresholds used only if the supplied params find nothing at all, or
+# when auto-thresholding is requested but the signal is flat (noise sigma == 0).
 _FALLBACK_HEIGHT = 10.0
 _FALLBACK_PROMINENCE = 5.0
 
 
+def estimate_noise(signal: np.ndarray) -> float:
+    """Robust noise sigma via Gaussian-scaled MAD (1.4826·MAD).
+
+    Sparse peaks don't move the median, so on a baseline-corrected chromatogram
+    this reflects the flat-baseline noise rather than the peaks. Returns 0.0 for
+    a degenerate/flat signal, letting the caller fall back to a fixed threshold.
+
+    Not the derivative-MAD: GC data is heavily oversampled, so adjacent points
+    barely differ and diff-based sigma underestimates the real noise floor ~10x.
+    """
+    sig = np.asarray(signal, dtype=float)
+    if sig.size < 2:
+        return 0.0
+    return float(median_abs_deviation(sig, scale="normal", nan_policy="omit"))
+
+
 @dataclass
 class DetectionParams:
-    min_height: float = 50.0  # mV
-    min_prominence: float = 20.0  # mV
+    # None -> auto: threshold = noise_snr_* x robust noise sigma (see estimate_noise).
+    # A number forces a fixed mV cut (the pre-auto behaviour; use min_height=50).
+    min_height: float | None = None  # mV, or None for auto
+    min_prominence: float | None = None  # mV, or None for auto
     min_distance: int = 50  # data points
     min_width_min: float = 0.03  # minutes (~1.8 s) — filters sub-second artifacts
     smooth_window: int = 0  # Savitzky-Golay window for detection (odd, > polyorder); 0 = off
@@ -36,6 +56,10 @@ class DetectionParams:
     # away from the peak in noisy baseline, inflating zero-clamped areas.
     # 0 disables clipping (legacy prominence-base boundaries).
     clip_window_frac: float = 0.001
+    # Auto-threshold factors (used only when min_height/min_prominence is None):
+    # threshold = factor x noise sigma. 10sigma ≈ limit of quantitation, 5sigma prominence.
+    noise_snr_height: float = 10.0
+    noise_snr_prominence: float = 5.0
 
 
 @dataclass
@@ -396,10 +420,24 @@ def detect_peaks(chrom: Chromatogram, params: DetectionParams) -> list[DetectedP
     width_pts = params.min_width_min * pts_per_min if pts_per_min > 0 else 0.0
     width_arg = width_pts if width_pts > 0 else None
 
+    # Resolve auto thresholds (None) from the measured noise sigma; a flat signal
+    # (sigma == 0) falls back to the fixed looser constants.
+    sigma = estimate_noise(detect_signal)
+    height = (
+        params.min_height
+        if params.min_height is not None
+        else (params.noise_snr_height * sigma if sigma > 0 else _FALLBACK_HEIGHT)
+    )
+    prominence = (
+        params.min_prominence
+        if params.min_prominence is not None
+        else (params.noise_snr_prominence * sigma if sigma > 0 else _FALLBACK_PROMINENCE)
+    )
+
     peaks, props = find_peaks(
         detect_signal,
-        height=params.min_height,
-        prominence=params.min_prominence,
+        height=height,
+        prominence=prominence,
         distance=params.min_distance,
         width=width_arg,
     )

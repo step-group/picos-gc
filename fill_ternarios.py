@@ -22,6 +22,7 @@ Run:    uv run fill_ternarios.py   (PEP 723 header pulls openpyxl; paths are
 
 from __future__ import annotations
 
+import argparse
 import csv
 import re
 import shutil
@@ -38,6 +39,16 @@ WB_OUT = _ROOT / "Sistemas ternarios_MF_filled.xlsx"
 CC_MF = _ROOT / "CC_MF.xlsx"
 DATA = _ROOT / "FLECK_TERPENOS2026"
 OUT_CSV = _ROOT / "out" / "ternarios_resultados.csv"
+BIN_OUT_CSV = _ROOT / "out" / "binarios_tielines.csv"  # computed Water-solvent binary endpoints
+BINARIOS_CSV = _ROOT / "out" / "BINARIOS_TERPENOS" / "samples.csv"
+# BIN system -> ternary block, SEQUENTIAL (BIN n = the nth block in order A,B,C,D,E,F,H,I):
+# 1=ThyCarvone(A) 2=ThyGer(B) 3=ThyCarvacrol(C) 4=ThyEugenol(D) 5=ThyCamphor(E)
+# 6=CamphorCarvone(F) 7=CamphorCarvacrol(H) 8=CamphorEugenol(I). Carvone reads as
+# "Geraniol" in samples.csv (the binary-method RT is miscalibrated), so blocks A & F route
+# their Carvone area through fill_binary's single-remaining-terpene fallback (right value,
+# wrong label). All 8 blocks map; a block only resolves an endpoint once its masses + KF
+# are hand-entered on rows 25-28, so today only block A computes.
+BIN_TO_BLOCK = {1: "A", 2: "B", 3: "C", 4: "D", 5: "E", 6: "F", 7: "H", 8: "I"}
 
 TERPS = ("camph", "carvone", "carvacrol", "geraniol", "thymol", "eugenol")
 DISPLAY = {  # canon -> workbook-style name written into blank M3/N3 cells
@@ -126,6 +137,123 @@ def load_vial_areas(merged_csv: Path) -> dict[tuple[int, str, int], dict[str, fl
     for r in rows[1:]:
         if r and r[0] and (key := parse_key(r[0])) is not None:
             out[key] = {c: float(r[i] or 0) for i, c in cols.items()}
+    return out
+
+
+def load_binary_areas(
+    csv_path: Path, warn: list[str]
+) -> dict[tuple[int, str, int], dict[str, float]]:
+    """{(binnum, phase, rep): {canon_compound: area}} from BINARIOS samples.csv.
+
+    Same shape as load_vial_areas, but the columns end in `_area` (per-injection, no
+    `_area_mean` averaging). Missing file -> {} + a warning (binary areas just stay blank).
+    """
+    if not csv_path.exists():
+        warn.append(f"binary: {csv_path} missing - run label_terpenos.py (skipping binary fill)")
+        return {}
+    rows = list(csv.reader(csv_path.open()))
+    hdr = rows[0]
+    cols = {i: canon(h[:-5]) for i, h in enumerate(hdr) if h.endswith("_area")}
+    out: dict[tuple[int, str, int], dict[str, float]] = {}
+    for r in rows[1:]:
+        if r and r[0] and (key := parse_key(r[0])) is not None:
+            out[key] = {c: float(r[i] or 0) for i, c in cols.items()}
+    return out
+
+
+# BIN phase/rep -> tie-line row: Superior (organic) 25/26, Inferior (aqueous) 27/28.
+_BIN_ROWS = {("T", 1): 25, ("T", 2): 26, ("B", 1): 27, ("B", 2): 28}
+
+
+def fill_binary(ws, block: str, bin_areas: dict, warn: list[str]) -> None:
+    """Write the Water-solvent tie-line HBA/HBD areas into M/N of rows 25-28.
+
+    Areas come from BINARIOS samples.csv via BIN_TO_BLOCK; only M/N are written (masses
+    D/F/H and KF U/V stay hand-entered). Every block maps to a BIN, so the guard below is
+    just a safety net. Must run after fill_block so M3/N3 (HBA/HBD names) are set.
+    """
+    binnum = next((b for b, blk in BIN_TO_BLOCK.items() if blk == block), None)
+    if binnum is None:
+        return  # unmapped block (shouldn't happen — all 8 map)
+    if ws["A25"].value != "Bin":
+        warn.append(f"{block}: no binary tie-line block (run add_binary_tielines.py first)")
+        return
+    hba_key, hbd_key = canon(ws["M3"].value or ""), canon(ws["N3"].value or "")
+    for (ph, rep), row in _BIN_ROWS.items():
+        a = bin_areas.get((binnum, ph, rep))
+        if a is None:
+            warn.append(f"{block}: binary BIN{binnum} {ph}{rep} absent from samples.csv")
+            continue
+        terp = {c: v for c, v in a.items() if c != "ipa" and v}  # nonzero terpene areas
+        if hba_key not in terp:
+            warn.append(f"{block}: binary HBA {hba_key!r} not found in BIN{binnum} {ph}{rep}")
+            continue
+        ws[f"M{row}"] = terp[hba_key]
+        if hbd_key in terp:
+            ws[f"N{row}"] = terp[hbd_key]
+        else:  # HBD label differs (classifier) -> use the single remaining terpene
+            other = [v for c, v in terp.items() if c != hba_key]
+            if len(other) == 1:
+                ws[f"N{row}"] = other[0]
+                warn.append(
+                    f"{block}: binary HBD {hbd_key!r} not labelled in BIN{binnum} {ph}{rep}; "
+                    "used the other terpene"
+                )
+            else:
+                warn.append(f"{block}: binary HBD ambiguous in BIN{binnum} {ph}{rep} ({list(terp)})")
+
+
+def _binary_bydiff(ws, reps: tuple[int, int], g2, h2) -> list[float] | None:
+    """Binary endpoint (HBA, HBD, water) by difference — no KF. Per rep: dilution
+    df=(H-D)/(F-D), HBA=M/g2*df/100, HBD=N/h2*df/100, water=1-HBA-HBD; average the reps.
+    Returns None if slopes, masses, or areas are missing (can't compute without them)."""
+    if not (g2 and h2):
+        return None
+    hbas, hbds = [], []
+    for r in reps:
+        d, f, h = _num(ws, f"D{r}"), _num(ws, f"F{r}"), _num(ws, f"H{r}")
+        m, n = _num(ws, f"M{r}"), _num(ws, f"N{r}")
+        if None in (d, f, h, m, n) or (f - d) == 0:
+            continue
+        df = (h - d) / (f - d)
+        hbas.append(m / g2 * df / 100)
+        hbds.append(n / h2 * df / 100)
+    if not hbas:
+        return None
+    hba, hbd = sum(hbas) / len(hbas), sum(hbds) / len(hbds)
+    return [hba, hbd, 1.0 - hba - hbd]
+
+
+def binary_tieline_rows(wb_d) -> list[list]:
+    """Water-solvent binary endpoints from a recalc'd (data_only) workbook: rows 25/27,
+    cols AE/AF/AG = HBA/HBD/water mass fractions (2PE = 0).
+
+    The pre-wired formula is KF-anchored. When its endpoint resolves (areas+masses+KF)
+    we use it (`water_src=kf`); when KF is blank (e.g. the operator dropped the unreliable
+    high-water aqueous KF) the formula errors, so we fall back to water **by difference**
+    from areas+masses (`water_src=bydiff`) — but only for a genuinely aqueous endpoint
+    (resulting water > 0.5), since by-difference is unreliable for the water-poor organic
+    phase. A block with no masses yields neither and contributes nothing. Skips the
+    degenerate pure-water point (AE=AF=0 when masses+KF but no areas are present)."""
+    out = []
+    for sheet in wb_d.sheetnames:
+        ws = wb_d[sheet]
+        if ws["A25"].value != "Bin":
+            continue
+        block = sheet.split()[-1]
+        hba, hbd = ws["M3"].value, ws["N3"].value
+        g2, h2 = _num(ws, "G2"), _num(ws, "H2")
+        for row, reps in ((25, (25, 26)), (27, (27, 28))):
+            ae, af, ag = _num(ws, f"AE{row}"), _num(ws, f"AF{row}"), _num(ws, f"AG{row}")
+            src = "kf"
+            if None in (ae, af, ag) or (ae == 0 and af == 0):
+                bd = _binary_bydiff(ws, reps, g2, h2)
+                if bd is None or bd[2] <= 0.5:  # no data, or organic phase w/o KF (untrustworthy)
+                    continue
+                ae, af, ag = bd
+                src = "bydiff"
+            phase = "aqueous" if ag > 0.5 else "organic"
+            out.append([block, phase, hba, _fmt(ae), hbd, _fmt(af), _fmt(ag), src])
     return out
 
 
@@ -272,8 +400,12 @@ def _replicate_mismatch(g: list[dict], w, x, y) -> float:
     return max(areas) / min(areas)
 
 
-def results_rows(ws, block: str, recs: list[dict]) -> list[list]:
-    """Replicate the sheet formula chain -> one normalized ternary point per (system, phase)."""
+def results_rows(ws, block: str, recs: list[dict], aqueous_bydiff: bool = True) -> list[list]:
+    """Replicate the sheet formula chain -> one normalized ternary point per (system, phase).
+
+    Organic (water-poor) phases are always KF-anchored. Aqueous (water-rich) phases use
+    water BY DIFFERENCE (`aqueous_bydiff=True`, default) or KF proportional normalisation
+    (`False`, legacy). The chosen source is emitted per row as `water_src` (kf|bydiff)."""
     f2, g2, h2 = _num(ws, "F2"), _num(ws, "G2"), _num(ws, "H2")
     hba_name, hbd_name = ws["M3"].value, ws["N3"].value
     groups: dict[tuple[int, str], list[dict]] = {}
@@ -321,18 +453,28 @@ def results_rows(ws, block: str, recs: list[dict]) -> list[list]:
         w, x, y, z = avg(sol), avg(hba), avg(hbd), avg(kf)
         flags = [] if (g2 and h2) else ["slopes_missing"]
         closure = None
+        src = ""
         if None not in (w, x, y, z):
             closure = w + x + y + z
             if z < ORGANIC_WATER_MAX:
                 # Water-poor (organic) phase: KF titrates its small water content
                 # reliably, so anchor it and split the rest by GC ratio — this fixes the
-                # closure-inflated D1/I1 curve. Water-rich phases keep proportional
-                # normalisation (KF is the bulk there; the trace dissolved species come
-                # straight from GC rather than being forced to close mass balance).
+                # closure-inflated D1/I1 curve. (By-difference is wrong here: water is the
+                # minor component, so it would absorb all the GC closure error.)
                 norm, _ = kf_anchor(w, x, y, z)
+                src = "kf"
+            elif aqueous_bydiff:
+                # Water-rich (aqueous) phase, water BY DIFFERENCE: water = 1 - Σ(organics).
+                # At ~0.95+ water the KF titration is unreliable, and water so dominates
+                # that it's insensitive to the method; the dissolved GC species stay as
+                # measured. `closure` (below) keeps the raw KF sum as a drift diagnostic.
+                norm = [w, x, y, max(0.0, 1.0 - (w + x + y))]
+                src = "bydiff"
             else:
+                # Water-rich phase, KF-normalised (legacy --aqueous-water kf).
                 tot = closure if closure > 0 else 1.0
                 norm = [w / tot, x / tot, y / tot, z / tot]
+                src = "kf"
             lo, hi = CLOSURE_BAND
             if not (lo <= closure <= hi):
                 flags.append("low_closure")
@@ -364,6 +506,7 @@ def results_rows(ws, block: str, recs: list[dict]) -> list[list]:
                 _fmt(closure),
                 len(use),
                 ";".join(flags),
+                src,
             ]
         )
     return out
@@ -470,12 +613,25 @@ def run_tieline_plots(warn: list[str]) -> None:
 
 
 def main() -> None:
+    ap = argparse.ArgumentParser(description="Fill the ternary workbook + emit results CSVs.")
+    ap.add_argument(
+        "--aqueous-water",
+        choices=["difference", "kf"],
+        default="difference",
+        help="aqueous-phase water: 'difference' (1-Σorganics, default) or 'kf' (KF-normalised). "
+        "Organic phases are always KF-anchored.",
+    )
+    args = ap.parse_args()
+    aqueous_bydiff = args.aqueous_water == "difference"
+    print(f"aqueous-phase water: {args.aqueous_water}")
+
     cc = cc_mf_slopes(CC_MF)
     wb = openpyxl.load_workbook(WB_IN, data_only=False)  # keep formulas (write target)
     wb_d = openpyxl.load_workbook(WB_IN, data_only=True)  # cached values (read masses/KF)
     priority = hba_priority(wb)  # HBA/HBD ordering learned from labelled sheets
     warn: list[str] = []
     all_rows: list[list] = []
+    bin_areas = load_binary_areas(BINARIOS_CSV, warn)  # tie-line areas (rows 25-28)
 
     for sheet in wb.sheetnames:
         ws = wb[sheet]
@@ -490,7 +646,8 @@ def main() -> None:
             continue
         areas = load_vial_areas(merged)
         recs = fill_block(ws, wb_d[sheet], block, areas, cc, priority, warn)
-        all_rows += results_rows(ws, block, recs)
+        fill_binary(ws, block, bin_areas, warn)  # Water-solvent tie-line M/N (rows 25-28)
+        all_rows += results_rows(ws, block, recs, aqueous_bydiff)
         print(
             f"Bloque {block}: filled {len(recs)}/20 vials "
             f"(HBA={ws['M3'].value}, HBD={ws['N3'].value}, 2PhEt slope={_num(ws, 'F2')})"
@@ -516,10 +673,19 @@ def main() -> None:
                 "closure",
                 "n_vials",
                 "flags",
+                "water_src",
             ]
         )
         w.writerows(all_rows)
-    print(f"\nWrote {WB_OUT}\nWrote {OUT_CSV}")
+    # Water-solvent binary tie-line endpoints (rows 25-28) for the plotter. Read from the
+    # recalc'd file so the pre-wired AE/AF/AG formulas have cached values.
+    wb_bin = openpyxl.load_workbook(WB_OUT, data_only=True)
+    bin_rows = binary_tieline_rows(wb_bin)
+    with BIN_OUT_CSV.open("w", newline="") as fh:
+        w = csv.writer(fh)
+        w.writerow(["block", "phase", "HBA", "HBA_wt", "HBD", "HBD_wt", "water", "water_src"])
+        w.writerows(bin_rows)
+    print(f"\nWrote {WB_OUT}\nWrote {OUT_CSV}\nWrote {BIN_OUT_CSV} ({len(bin_rows)} binary endpoint(s))")
     run_tieline_plots(warn)
     if warn:
         print("\nWARNINGS:")

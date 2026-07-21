@@ -12,6 +12,8 @@ dependencies = [
     "olefile>=0.47",
     "scipy>=1.14",
     "pybaselines>=1.1",
+    "pcsaft-quaternary",
+    "openpyxl>=3.1.5",
 ]
 
 [project.optional-dependencies]
@@ -53,3 +55,11 @@ ignore_missing_imports = true  # scipy / olefile / matplotlib ship no type stubs
 testpaths = ["tests"]
 pythonpath = ["."]
 addopts = "-q"
+
+[tool.uv.workspace]
+members = [
+    "pcsaft-quaternary",
+]
+
+[tool.uv.sources]
+pcsaft-quaternary = { workspace = true }
