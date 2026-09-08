@@ -14,14 +14,19 @@ def _sheet():
     ws["M3"], ws["N3"] = "Thymol", "Carvone"
     # Z1: rows 5-6 Superior (both vials, closes), rows 7-8 Inferior (vial 8 never injected)
     # Z2: rows 9-12, no areas at all.
-    ws["A5"], ws["A9"] = "Z1", "Z2"
-    phases = ["Superior", "Superior", "Inferior", "Inferior"] * 2
-    for r, phase in zip(range(5, 13), phases, strict=True):
+    # Z3: rows 13-16 aqueous (KF 98 %): Superior clean (0.05 % terpenes both vials),
+    #     Inferior vial 15 clean, vial 16 carries 1 % terpenes (organic droplets).
+    ws["A5"], ws["A9"], ws["A13"] = "Z1", "Z2", "Z3"
+    phases = ["Superior", "Superior", "Inferior", "Inferior"] * 3
+    for r, phase in zip(range(5, 17), phases, strict=True):
         ws[f"B{r}"] = phase
         ws[f"D{r}"], ws[f"F{r}"], ws[f"H{r}"] = 10.0, 11.0, 12.0  # dilution x2
-        ws[f"U{r}"] = 20.0  # KF 20 % water
+        ws[f"U{r}"] = 98.0 if r >= 13 else 20.0  # KF % water
     for r in (5, 6, 7):  # 2PE 20 %, HBA 20 %, HBD 20 % (diluted 10 % each) + 20 % water = 0.8
         ws[f"L{r}"], ws[f"M{r}"], ws[f"N{r}"] = 1000.0, 1000.0, 1000.0
+    for r in (13, 14, 15):  # 2PE 1 %, terpenes 0.025 % each
+        ws[f"L{r}"], ws[f"M{r}"], ws[f"N{r}"] = 50.0, 1.25, 1.25
+    ws["L16"], ws["M16"], ws["N16"] = 50.0, 25.0, 25.0  # 2PE 1 %, terpenes 0.5 % each
     return wb
 
 
@@ -29,7 +34,12 @@ def test_verdicts():
     by = {(r["system"], r["phase"]): r for r in audit(_sheet())}
     assert by[("Z1", "Superior")]["repeat"] == "no"
     assert by[("Z1", "Superior")]["closure"] == "0.80000"
+    assert by[("Z1", "Superior")]["aq_terpene_max"] == ""  # organic phase: rule not applied
     assert by[("Z1", "Inferior")]["reason"] == "single_vial"
     assert by[("Z2", "Superior")]["reason"] == "missing_vials"
     assert by[("Z2", "Inferior")]["n_kf"] == 2
-    assert len(by) == 4  # no binary block on a synthetic sheet
+    assert by[("Z3", "Superior")]["repeat"] == "no"
+    assert by[("Z3", "Superior")]["aq_terpene_max"] == "0.00050"
+    assert by[("Z3", "Inferior")]["reason"] == "aqueous_organics_suspect"
+    assert by[("Z3", "Inferior")]["aq_terpene_max"] == "0.01000"
+    assert len(by) == 6  # no binary block on a synthetic sheet

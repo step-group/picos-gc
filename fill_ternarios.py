@@ -400,6 +400,19 @@ def _replicate_mismatch(g: list[dict], w, x, y) -> float:
     return max(areas) / min(areas)
 
 
+def vial_fractions(r: dict, f2, g2, h2) -> dict | None:
+    """One vial's raw mass fractions {s: 2PE, a: HBA, b: HBD, kf: [water...]} from its
+    areas, slopes and dilution K/I. None when the dilution is missing."""
+    df = (r["K"] / r["I"]) if (r["K"] and r["I"]) else None
+    if df is None:
+        return None
+    s = (r["L"] / f2 * df / 100) if (f2 and r["L"] is not None) else None
+    a = (r["M"] / g2 * df / 100) if (g2 and r["M"] is not None) else None
+    b = (r["N"] / h2 * df / 100) if (h2 and r["N"] is not None) else None
+    ks = [c / 100 for c in (r["U"], r["V"]) if c is not None]
+    return {"s": s, "a": a, "b": b, "kf": ks, "raw": r}
+
+
 def results_rows(ws, block: str, recs: list[dict], aqueous_bydiff: bool = True) -> list[list]:
     """Replicate the sheet formula chain -> one normalized ternary point per (system, phase).
 
@@ -420,16 +433,7 @@ def results_rows(ws, block: str, recs: list[dict], aqueous_bydiff: bool = True) 
         # phase* than its pair can be dropped — averaging a mixed pair otherwise makes a
         # mid-triangle phantom (E2 Superior = one genuine aqueous vial + one that read
         # ~96% KF water yet carried a full organic terpene load).
-        vials = []
-        for r in g:
-            df = (r["K"] / r["I"]) if (r["K"] and r["I"]) else None
-            if df is None:
-                continue
-            s = (r["L"] / f2 * df / 100) if (f2 and r["L"] is not None) else None
-            a = (r["M"] / g2 * df / 100) if (g2 and r["M"] is not None) else None
-            b = (r["N"] / h2 * df / 100) if (h2 and r["N"] is not None) else None
-            ks = [c / 100 for c in (r["U"], r["V"]) if c is not None]
-            vials.append({"s": s, "a": a, "b": b, "kf": ks, "raw": r})
+        vials = [v for r in g if (v := vial_fractions(r, f2, g2, h2)) is not None]
 
         def _is_mixup(v):
             # Majority-water AND majority-organic at once: impossible for one phase, so

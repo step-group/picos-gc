@@ -63,7 +63,10 @@ aqueous KF was measured).
 and writes `out/repeat_list.csv`: one row per (system, phase) point, ternary **and** binary,
 with a `repeat` verdict. Reasons: `missing_vials`, `single_vial` (blank L/M/N = never
 injected), `low_closure`, `replicate_mismatch`, `dropped_replicate` (the last three via
-`fill_ternarios.results_rows`, so they match the pipeline). Points with no vials (C4, C5)
+`fill_ternarios.results_rows`, so they match the pipeline), and `aqueous_organics_suspect`
+(organic droplets in an aqueous vial: terpenes above `AQ_TERPENE_MAX` = 0.5 %, or the two
+vials' total organics differing > 3x; the pipeline's `replicate_mismatch` is gated on a
+component > 10 % and so never fires on aqueous phases). Points with no vials (C4, C5)
 appear here but are **absent** from `ternarios_resultados.csv`. A single KF titration is
 reported as `n_kf`, not a repeat reason. Re-run `fill_ternarios.py` first if the master
 workbook changed. Test without the project venv (it cannot sync while `pcsaft-quaternary`
