@@ -39,7 +39,7 @@
         {
           let d = ()
           if r.closure != "" { d.push([closure Σ #r.closure]) }
-          if r.aq_terpene_max != "" { d.push([terpenes #gl(r.aq_terpene_max) g/L]) }
+          if r.aq_terpene_max != "" { d.push([terpenes #gl(r.aq_terpene_max) g/L (max #gl(r.aq_ceiling))]) }
           if r.aq_organics_ratio != "" { d.push([vial ratio #r.aq_organics_ratio]) }
           d.join(linebreak())
         },
@@ -61,8 +61,9 @@
 #v(6pt)
 #block(inset: 8pt, stroke: 0.4pt + luma(160), radius: 3pt, width: 100%)[
   *Reference values for judging the new vials (mass basis, 30 °C).*
-  Clean aqueous phases here carry 0.1–0.6 g/L of each terpene (up to 1.3 g/L for camphor + carvacrol); the audit ceiling is 5 g/L summed terpenes.
-  Pure-water solubility, literature: thymol 1.1, carvacrol 1.3, carvone 1.6, camphor 1.6–2.1, eugenol 2.1, geraniol 1.2 g/L.
+  Clean aqueous phases here carry 0.1–0.6 g/L of each terpene (up to 1.3 g/L for camphor + carvacrol).
+  Pure-water solubility at 30 °C (Martins 2017; Smyrl 1980 for carvone; Yalkowsky for camphor): thymol 1.1, carvacrol 1.3, carvone 1.6, camphor ≈2.0, eugenol 2.1, geraniol 1.2 g/L.
+  The audit ceiling per point ("max" above) is the pair's summed solubility +20 % for method scatter, 2.8–4.9 g/L: even both terpenes at saturation cannot exceed it.
   2‑phenylethanol in water: 23–30 g/L. Carried-over organic droplets show as both terpenes rising together at the organic phase's ratio.
   Organic phases: closure Σ must fall in 0.5–1.5; replicate injections must agree within 3×.
 ]

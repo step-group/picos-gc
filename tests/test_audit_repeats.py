@@ -55,6 +55,7 @@ def test_verdicts():
     assert z3i["repeat"] == "no" and z3i["dropped"] == "Z3-B2" and z3i["n_vials_used"] == 1
     assert "dropped_replicate" in z3i["flags"]
     assert z3i["aq_terpene_max"] == "0.00050"  # only the kept vial is judged
+    assert z3i["aq_ceiling"] == "0.00326"  # (thymol 1.11 + carvone 1.61 g/L at 30 °C) x 1.2
     # both vials contaminated: nothing to pick
     assert by[("Z4", "Superior")]["reason"] == "aqueous_organics_suspect"
     assert by[("Z4", "Superior")]["dropped"] == ""

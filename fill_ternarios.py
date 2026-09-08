@@ -73,11 +73,32 @@ CLOSURE_BAND = (0.5, 1.5)
 MISMATCH_MAX = 3.0
 MISMATCH_MIN_FRAC = 0.1  # only judge mismatch on a real constituent, not trace wobble
 ORGANIC_WATER_MAX = 0.5  # KF anchor only the water-poor (organic) phase; see results_rows
-# Aqueous vial carrying more terpenes (HBA+HBD mass fraction) than this took organic-phase
-# droplets: water dissolves ~0.1-0.25 % of each of these terpenes and clean aqueous vials
-# here sit at 0.01-0.05 %. ponytail: one fixed ceiling above the summed solubility of any
-# pair; make it per-pair (solubility table) if a legit 2PE-cosolvency case ever exceeds it.
-AQ_TERPENE_MAX = 0.005
+# Pure-water solubility at 30 °C, mass fraction (g/L / 1000), from the thesis
+# data/raw/solubility/water_terpene/measurements.csv: thymol, carvacrol, eugenol, geraniol
+# = Martins et al. 2017 (303.15 K shake-flask); carvone = Smyrl & LeMaguer 1980 (303.15 K);
+# camphor = Yalkowsky compilation, 1.0-2.1 g/L at 293-298 K and 2.5 at 310 K, so ~2.0.
+# An aqueous vial whose HBA+HBD exceeds the PAIR's summed solubility took organic-phase
+# droplets — even both terpenes at saturation cannot reach it (clean vials here sit at
+# 0.1-0.6 g/L). ponytail: 30 °C only; geraniol climbs steeply above (5.5 g/L at 40 °C),
+# so add a temperature argument if a block was equilibrated warmer.
+AQ_SOLUBILITY_30C = {
+    "thymol": 0.00111,
+    "carvacrol": 0.00129,
+    "eugenol": 0.00210,
+    "geraniol": 0.00119,
+    "carvone": 0.00161,
+    "camphor": 0.00200,
+}
+AQ_SOLUBILITY_TOL = 1.2  # +20 %: shake-flask literature scatters by that much between labs
+
+
+def aq_terpene_max(hba, hbd) -> float:
+    """Droplet ceiling for a pair: sum of the two pure-water solubilities (mass fraction)
+    × AQ_SOLUBILITY_TOL. An unknown name counts 0.0025, i.e. an unlabelled pair falls back
+    to the old 0.5 % (× tolerance)."""
+    return AQ_SOLUBILITY_TOL * sum(
+        AQ_SOLUBILITY_30C.get(canon(n or ""), 0.0025) for n in (hba, hbd)
+    )
 
 
 def parse_key(code: str) -> tuple[int, str, int] | None:
@@ -424,12 +445,13 @@ def _terp(v: dict) -> float:
     return (v["a"] or 0.0) + (v["b"] or 0.0)
 
 
-def aqueous_keep(vials: list[dict]) -> list[dict]:
+def aqueous_keep(vials: list[dict], terp_max: float) -> list[dict]:
     """The vials of one phase worth averaging. Drops (1) a vial that sampled the wrong
     phase — majority-water AND majority-organic at once (E2 Superior: ~96 % KF water with
     a full organic terpene load); (2) an aqueous vial that took organic-phase droplets —
-    terpenes above AQ_TERPENE_MAX — when its pair is clean, since carryover only ever adds
-    organics. If every vial fails, keep them all (the point stays flagged downstream)."""
+    terpenes above `terp_max` (see aq_terpene_max) — when its pair is clean, since
+    carryover only ever adds organics. If every vial fails, keep them all (the point stays
+    flagged downstream)."""
 
     def water(v):
         return sum(v["kf"]) / len(v["kf"]) if v["kf"] else 0.0
@@ -440,7 +462,7 @@ def aqueous_keep(vials: list[dict]) -> list[dict]:
 
     keep = [v for v in vials if not mixup(v)] or vials
     if any(water(v) >= ORGANIC_WATER_MAX for v in keep):  # aqueous phase
-        clean = [v for v in keep if _terp(v) <= AQ_TERPENE_MAX]
+        clean = [v for v in keep if _terp(v) <= terp_max]
         keep = clean or keep
     return keep
 
@@ -466,7 +488,7 @@ def results_rows(ws, block: str, recs: list[dict], aqueous_bydiff: bool = True) 
         # mid-triangle phantom (E2 Superior = one genuine aqueous vial + one that read
         # ~96% KF water yet carried a full organic terpene load).
         vials = [v for r in g if (v := vial_fractions(r, f2, g2, h2)) is not None]
-        use = aqueous_keep(vials)
+        use = aqueous_keep(vials, aq_terpene_max(hba_name, hbd_name))
         dropped = len(use) < len(vials)
 
         def avg(xs):

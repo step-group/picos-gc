@@ -63,8 +63,9 @@ aqueous KF was measured).
 and writes `out/repeat_list.csv`: one row per (system, phase) point, ternary **and** binary,
 with a `repeat` verdict. Reasons: `missing_vials` (blank L/M/N = never injected),
 `low_closure`, `replicate_mismatch` (both via `fill_ternarios.results_rows`, so they match
-the pipeline), `aqueous_organics_suspect` (organic droplets in **every** kept aqueous vial:
-terpenes above `AQ_TERPENE_MAX` = 0.5 %) and `aqueous_replicate_mismatch` (kept aqueous
+the pipeline), `aqueous_organics_suspect` (organic droplets in **every** kept aqueous vial: terpenes above
+the pair's summed pure-water solubility at 30 °C +20 % method tolerance, `AQ_SOLUBILITY_30C`
+× `AQ_SOLUBILITY_TOL` in `aq_terpene_max`, 2.8–4.9 g/L by pair) and `aqueous_replicate_mismatch` (kept aqueous
 vials' total organics differ > 3x with no droplet signature; the pipeline's
 `replicate_mismatch` is gated on a component > 10 % and never fires on aqueous phases).
 Informational, never a repeat: `single_vial` (one clean vial is accepted) and
