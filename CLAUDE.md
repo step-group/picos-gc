@@ -69,6 +69,7 @@ vials' total organics differing > 3x; the pipeline's `replicate_mismatch` is gat
 component > 10 % and so never fires on aqueous phases). Points with no vials (C4, C5)
 appear here but are **absent** from `ternarios_resultados.csv`. A single KF titration is
 reported as `n_kf`, not a repeat reason. Re-run `fill_ternarios.py` first if the master
-workbook changed. Test without the project venv (it cannot sync while `pcsaft-quaternary`
+workbook changed. Printable lab worksheet (checkboxes, sample codes, per-reason action):
+`typst compile repeat_list.typ out/repeat_list.pdf` — it reads the CSV, no Python. Test without the project venv (it cannot sync while `pcsaft-quaternary`
 is an empty gitlink): `uv run --no-project --with openpyxl --with pytest pytest --noconftest
 -o pythonpath=. tests/test_audit_repeats.py tests/test_fill_ternarios.py`.

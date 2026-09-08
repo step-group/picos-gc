@@ -32,6 +32,7 @@ from pathlib import Path
 import openpyxl
 
 from fill_ternarios import (
+    BIN_TO_BLOCK,
     CLOSURE_BAND,
     MISMATCH_MAX,
     ORGANIC_WATER_MAX,
@@ -50,10 +51,17 @@ REPEAT_FLAGS = ("low_closure", "replicate_mismatch", "dropped_replicate")
 # make it per-pair (solubility table) if a legit 2PE-cosolvency case ever exceeds it.
 AQ_TERPENE_MAX = 0.005
 COLS = [
-    "kind", "block", "system", "phase", "n_expected", "n_with_areas", "n_vials_used",
-    "n_kf", "closure", "water_src", "aq_terpene_max", "aq_organics_ratio", "flags",
-    "repeat", "reason",
+    "kind", "block", "system", "phase", "hba", "hbd", "codes", "n_expected", "n_with_areas",
+    "n_vials_used", "n_kf", "closure", "water_src", "aq_terpene_max", "aq_organics_ratio",
+    "flags", "repeat", "reason",
 ]  # fmt: skip
+_BIN_CODE = {25: "T1", 26: "T2", 27: "B1", 28: "B2"}  # fill_ternarios._BIN_ROWS inverted
+
+
+def _codes(prefix: str, reps: list[str], have: list[bool]) -> str:
+    """Sample codes to prepare: only the missing ones when some are missing, else all."""
+    missing = [c for c, ok in zip(reps, have, strict=True) if not ok]
+    return ", ".join(f"{prefix}-{c}" for c in (missing or reps))
 
 
 def _has_areas(ws, r: int) -> bool:
@@ -125,10 +133,13 @@ def _ternary(ws, block: str) -> list[dict]:
             and (v := vial_fractions(r, f2, g2, h2)) is not None
         ]
         terp, ratio, suspect = _aqueous_organics(vials)
+        have = [_has_areas(ws, r) for r in rows]
         row = {
             "kind": "ternary", "block": block, "system": system, "phase": phase,
+            "hba": ws["M3"].value, "hbd": ws["N3"].value,
+            "codes": _codes(system, [f"{ph}{i}" for i in range(1, len(rows) + 1)], have),
             "n_expected": len(rows),
-            "n_with_areas": sum(_has_areas(ws, r) for r in rows),
+            "n_with_areas": sum(have),
             "n_vials_used": c[10] if c else 0,
             "n_kf": _n_kf(ws, rows),
             "closure": c[9] if c else "",
@@ -154,13 +165,15 @@ def _binary(ws, block: str) -> list[dict]:
             water, src = (bd[2], "bydiff") if bd else (None, "")
         closure = _num(ws, f"AA{row}")
         flags = "low_closure" if closure is not None and not (lo <= closure <= hi) else ""
+        have = [_num(ws, f"M{x}") is not None or _num(ws, f"N{x}") is not None for x in reps]
+        binnum = next(b for b, blk in BIN_TO_BLOCK.items() if blk == block)
         r = {
             "kind": "binary", "block": block, "system": f"{block}-bin",
             "phase": "" if water is None else ("aqueous" if water > 0.5 else "organic"),
+            "hba": ws["M3"].value, "hbd": ws["N3"].value,
+            "codes": _codes(f"BIN{binnum}", [_BIN_CODE[x] for x in reps], have),
             "n_expected": len(reps),
-            "n_with_areas": sum(
-                _num(ws, f"M{x}") is not None or _num(ws, f"N{x}") is not None for x in reps
-            ),
+            "n_with_areas": sum(have),
             "n_vials_used": len(reps) if water is not None else 0,
             "n_kf": _n_kf(ws, reps),
             "closure": f"{closure:.5f}" if closure is not None else "",

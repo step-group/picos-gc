@@ -35,8 +35,12 @@ def test_verdicts():
     assert by[("Z1", "Superior")]["repeat"] == "no"
     assert by[("Z1", "Superior")]["closure"] == "0.80000"
     assert by[("Z1", "Superior")]["aq_terpene_max"] == ""  # organic phase: rule not applied
+    assert by[("Z1", "Superior")]["codes"] == "Z1-T1, Z1-T2"  # complete point: both vials
     assert by[("Z1", "Inferior")]["reason"] == "single_vial"
+    assert by[("Z1", "Inferior")]["codes"] == "Z1-B2"  # only the missing vial
     assert by[("Z2", "Superior")]["reason"] == "missing_vials"
+    assert by[("Z2", "Superior")]["codes"] == "Z2-T1, Z2-T2"
+    assert by[("Z2", "Superior")]["hbd"] == "Carvone"
     assert by[("Z2", "Inferior")]["n_kf"] == 2
     assert by[("Z3", "Superior")]["repeat"] == "no"
     assert by[("Z3", "Superior")]["aq_terpene_max"] == "0.00050"
