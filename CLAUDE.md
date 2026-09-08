@@ -102,7 +102,9 @@ the full book back). The printable vial sheets (`PLANTILLA_IMPRESION.xlsx` → `
 cell by cell) keep the four vials of every kept tube plus their block's three header
 rows; block I (CamEug) is not in that template and is cloned from the last ternary block
 after the binaries, titled from `Lab_DES`. Vial codes stay `C4-T1` (hyphen; `CODE_RE`
-accepts it). `Sheet2` (the prep book's own binary vial sheet) is hidden as redundant. The 10 g
+accepts it). Every vial row is re-heighted to `SAMPLING_ROW_H` and every column header to
+`SAMPLING_HEAD_H`: the template mixes 15 pt (ternary, too small to hand-write a mass into)
+with 70.85 pt (binary, five rows to a page), and 23.85 pt clips `m_solvent (g)`. `Sheet2` (the prep book's own binary vial sheet) is hidden as redundant. The 10 g
 DES prep table (`datos_des`) is cropped to the DES the **ternary** tubes use, its
 experimental masses (G/L) cleared for the new weighings, and every binary gets a
 duplicated row below the legend (`_des_table`, labelled `<DES> (BINn)`, formulas

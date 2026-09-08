@@ -43,6 +43,13 @@ LAB_RECORD_COLS, LAB_RECORD_LABELS = "JKLMNOPQRST", ("D7", "F7")
 FEED_ROWS = range(6, 64)
 SAMPLING_SRC = _ROOT / "PLANTILLA_IMPRESION.xlsx"  # sheet "Sampling": printable vial sheets
 _BLOCK_TITLE = re.compile(r"^([A-Z]) — ")  # "C — ThyCarvac  (Thymol + Carvacrol)"
+_VIAL_CODE = re.compile(r"-[TB][12]$")  # C4-T1, BIN1-B2: a row somebody writes masses into
+# One height for every vial row, ~8.5 mm: the template mixes 15 pt (ternary, too small to
+# hand-write a mass into) with 70.85 pt (binary, five rows to a page). Tune here.
+SAMPLING_ROW_H = 24
+# The column header wraps to three lines in the narrow columns ("m_solvent (g)"), and the
+# template's own 23.85 pt clips the last one.
+SAMPLING_HEAD_H = 34
 SAMPLE_UL, IPA_UL = 300, 700  # ternary vials, like the binaries (template said 200 + 800, DF=5)
 # DES prep table (10 g, 1:1 molar): rows 17-25 of datos_des, DES name in B. Sheet1 is
 # the 5 g variant: hidden in the output, every batch is made at 10 g to have spare.
@@ -149,20 +156,16 @@ def _sampling(wb, tubes: set[str], lab, keep_lab: set[int]) -> None:
     after the binaries, titled from Lab_DES, with the row formulas re-pointed."""
     ws = _copy_sheet(openpyxl.load_workbook(SAMPLING_SRC)["Sampling"], wb, "Sampling")
     last = ws.max_row
-    keep, header, found, tpl, bin_row = set(), set(), set(), None, None
+    keep, header, found, tpl = set(), set(), set(), None
     for r in range(1, last + 1):
         a = ws[f"A{r}"].value
         if isinstance(a, str) and (_BLOCK_TITLE.match(a) or a.startswith("BINARIOS")):
             header = {r, r + 1, r + 2}
             tpl = r if _BLOCK_TITLE.match(a) else tpl
-            bin_row = r if a.startswith("BINARIOS") else bin_row
         elif a in tubes:
             keep |= header | set(range(r, r + 4))
             found.add(a)
     _hide(ws, range(1, last + 1), keep)
-    if bin_row:  # the template's binaries rows are ~5x taller: match the ternary block
-        for r in range(bin_row, last + 1):
-            ws.row_dimensions[r].height = ws.row_dimensions[min(r - bin_row + 1, 4)].height
     missing = sorted(tubes - found)
     if bins := [t for t in missing if t.startswith("BIN")]:
         raise ValueError(f"Sampling: no rows for {bins}")
@@ -189,6 +192,13 @@ def _sampling(wb, tubes: set[str], lab, keep_lab: set[int]) -> None:
             ws[f"I{r}"], ws[f"K{r}"] = str(SAMPLE_UL), f"+{IPA_UL} µL IPA"
             df = f"DF≈{(SAMPLE_UL + IPA_UL) / SAMPLE_UL:.1f}"
             ws[f"A{r + 1}"] = re.sub(r"DF[=≈][\d.]+", df, ws[f"A{r + 1}"].value)
+    # Last, so the cloned rows are covered too: every vial row and column header gets the
+    # one writable height, whichever block of the template it came from.
+    for r in range(1, ws.max_row + 1):
+        if _VIAL_CODE.search(str(ws[f"D{r}"].value or "")):
+            ws.row_dimensions[r].height = SAMPLING_ROW_H
+        elif ws[f"A{r}"].value == "System":
+            ws.row_dimensions[r].height = SAMPLING_HEAD_H
 
 
 def trim(wb, tubes: set[str]) -> None:

@@ -3,7 +3,7 @@ import pytest
 pytest.importorskip("openpyxl")
 import openpyxl
 
-from make_repeat_workbook import SRC, trim
+from make_repeat_workbook import SAMPLING_HEAD_H, SAMPLING_ROW_H, SRC, trim
 
 
 def test_trim_hides_everything_but_the_repeat_tubes():
@@ -50,8 +50,9 @@ def test_trim_hides_everything_but_the_repeat_tubes():
     assert "DF≈3.3" in sp["A48"].value and "DF=5" not in sp["A48"].value
     assert (sp["I221"].value, sp["K221"].value) == ("300", "+700 µL IPA")  # cloned block too
     assert (sp["I185"].value, sp["K185"].value) == (300, "+700 µL IPA")  # binaries untouched
-    heights = sp.row_dimensions  # binaries rows re-heighted like the ternary block
-    assert (heights[187].height, heights[188].height) == (heights[3].height, heights[4].height)
+    # one writable height everywhere: ternary (15 pt), binary (70.85 pt) and cloned rows
+    assert {sp.row_dimensions[r].height for r in (4, 62, 188, 224)} == {SAMPLING_ROW_H}
+    assert {sp.row_dimensions[r].height for r in (3, 187, 223)} == {SAMPLING_HEAD_H}
     assert sp["H62"].value == '=IF(OR(E62="",F62=""),"",F62-E62)'  # formulas survived the copy
     assert sp["A47"].font.b and sp["E62"].fill.fgColor.rgb == "FFFCE4D6"  # and so did styles
     # block I is not in the template: cloned after the binaries, titled from Lab_DES
