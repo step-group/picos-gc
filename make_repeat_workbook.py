@@ -35,9 +35,10 @@ OUT = _ROOT / "out" / "aromas_equilibrios_repeat.xlsx"
 _FEED_REF = re.compile(r"'2-phenylethanol_DES'!I(\d+)")
 LAB_ROWS, LAB_BIN_HEADER = range(10, 67), 58
 FEED_ROWS, GC_ROWS, GC_HEADER, GC_APPEND = range(6, 64), range(4, 43), 3, 44
-# DES prep tables: (sheet, data rows, columns holding the DES name). Sheet1 is the 5 g
-# variant laid out as two side-by-side tables (names in A and N).
-DES_TABLES = (("datos_des", range(17, 26), "B"), ("Sheet1", range(4, 13), "AN"))
+# DES prep table (10 g, 1:1 molar): rows 17-25 of datos_des, DES name in B. Sheet1 is
+# the 5 g variant: hidden in the output, every batch is made at 10 g to have spare.
+DES_TABLES = (("datos_des", range(17, 26), "B"),)
+HIDE_SHEETS = ("Sheet1",)
 BIN_V_DES_ML = 4  # Lab_DES F59:F66 (binary rows carry V_DES in F, no density)
 
 
@@ -91,6 +92,8 @@ def trim(wb, tubes: set[str]) -> None:
         if missing := des - {ws[f"{c}{r}"].value for r in rows for c in cols}:
             raise ValueError(f"{sheet}: no prep row for {sorted(missing)}")
         _hide(ws, rows, {r for r in rows if any(ws[f"{c}{r}"].value in des for c in cols)})
+    for sheet in HIDE_SHEETS:
+        wb[sheet].sheet_state = "hidden"
 
     feed = wb["2-phenylethanol_DES"]
     keep_feed = set()

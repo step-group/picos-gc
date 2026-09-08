@@ -23,14 +23,13 @@ def test_trim_hides_everything_but_the_repeat_tubes():
     assert [gc[f"D{r}"].value for r in range(45, 49)] == ["C4-T1", "C4-T2", "C4-B1", "C4-B2"]
     assert (gc["A45"].value, gc["B47"].value, gc["C48"].value) == ("C4", "Bot", 2)
     assert gc["A49"].value is None  # nothing past the four vials of the single ternary tube
-    # DES prep tables: only ThyCarvac (C4) and ThyCar (BIN1) remain, on both variants
+    # 10 g DES prep table: only ThyCarvac (C4) and ThyCar (BIN1) remain; 5 g sheet hidden
     dd = wb["datos_des"]
     assert [dd[f"B{r}"].value for r in range(17, 26) if not dd.row_dimensions[r].hidden] == [
         "ThyCar",
         "ThyCarvac",
     ]
-    s1 = wb["Sheet1"]  # row 4 = ThyCar | ThyEug, row 6 = ThyCarvac | CamEug
-    assert [r for r in range(4, 13) if not s1.row_dimensions[r].hidden] == [4, 6]
+    assert wb["Sheet1"].sheet_state == "hidden"
 
 
 def test_unknown_tube_is_an_error():
