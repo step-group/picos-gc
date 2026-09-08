@@ -38,6 +38,11 @@ def test_trim_hides_everything_but_the_repeat_tubes():
     visible = [r for r in range(1, 220) if not sp.row_dimensions[r].hidden]
     assert visible == [47, 48, 49, 62, 63, 64, 65, 185, 186, 187, 188, 189, 190, 191]
     assert (sp["D62"].value, sp["D188"].value) == ("C4-T1", "BIN1-T1")
+    # ternary vials: 300 µL sample + 700 µL IPA (was 200 + 800), method line's DF follows
+    assert (sp["I47"].value, sp["K47"].value) == ("300", "+700 µL IPA")
+    assert "DF≈3.3" in sp["A48"].value and "DF=5" not in sp["A48"].value
+    assert (sp["I221"].value, sp["K221"].value) == ("300", "+700 µL IPA")  # cloned block too
+    assert (sp["I185"].value, sp["K185"].value) == (300, "+700 µL IPA")  # binaries untouched
     heights = sp.row_dimensions  # binaries rows re-heighted like the ternary block
     assert (heights[187].height, heights[188].height) == (heights[3].height, heights[4].height)
     assert sp["H62"].value == '=IF(OR(E62="",F62=""),"",F62-E62)'  # formulas survived the copy

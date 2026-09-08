@@ -43,6 +43,7 @@ LAB_RECORD_COLS, LAB_RECORD_LABELS = "JKLMNOPQRST", ("D7", "F7")
 FEED_ROWS = range(6, 64)
 SAMPLING_SRC = _ROOT / "PLANTILLA_IMPRESION.xlsx"  # sheet "Sampling": printable vial sheets
 _BLOCK_TITLE = re.compile(r"^([A-Z]) — ")  # "C — ThyCarvac  (Thymol + Carvacrol)"
+SAMPLE_UL, IPA_UL = 300, 700  # ternary vials, like the binaries (template said 200 + 800, DF=5)
 # DES prep table (10 g, 1:1 molar): rows 17-25 of datos_des, DES name in B. Sheet1 is
 # the 5 g variant: hidden in the output, every batch is made at 10 g to have spare.
 DES_TABLES = (("datos_des", range(17, 26), "B"),)
@@ -147,6 +148,11 @@ def _sampling(wb, tubes: set[str], lab, keep_lab: set[int]) -> None:
                 for c in "HIJ":
                     ws[f"{c}{row}"] = re.sub(rf"(?<=[A-L]){src}\b", str(row), ws[f"{c}{src}"].value)
                 row += 1
+    for r in range(1, ws.max_row + 1):  # ternary block titles (cloned ones included)
+        if isinstance(ws[f"A{r}"].value, str) and _BLOCK_TITLE.match(ws[f"A{r}"].value):
+            ws[f"I{r}"], ws[f"K{r}"] = str(SAMPLE_UL), f"+{IPA_UL} µL IPA"
+            df = f"DF≈{(SAMPLE_UL + IPA_UL) / SAMPLE_UL:.1f}"
+            ws[f"A{r + 1}"] = re.sub(r"DF[=≈][\d.]+", df, ws[f"A{r + 1}"].value)
 
 
 def trim(wb, tubes: set[str]) -> None:
