@@ -27,6 +27,7 @@ from itertools import groupby
 from pathlib import Path
 
 import openpyxl
+from openpyxl.worksheet.pagebreak import Break
 
 from fill_ternarios import BIN_TO_BLOCK
 
@@ -50,6 +51,11 @@ SAMPLING_ROW_H = 24
 # The column header wraps to three lines in the narrow columns ("m_solvent (g)"), and the
 # template's own 23.85 pt clips the last one.
 SAMPLING_HEAD_H = 34
+# Row-height points that fit on one landscape page. Not the raw 451 pt of paper: fit-to-
+# width shrinks this sheet to ~78 %, so more rows fit than the margins suggest. Measured
+# off a render and rounded down; re-measure if a column width changes.
+SAMPLING_PAGE_H = 560
+DEFAULT_ROW_H = 15
 SAMPLE_UL, IPA_UL = 300, 700  # ternary vials, like the binaries (template said 200 + 800, DF=5)
 # DES prep table (10 g, 1:1 molar): rows 17-25 of datos_des, DES name in B. Sheet1 is
 # the 5 g variant: hidden in the output, every batch is made at 10 g to have spare.
@@ -129,6 +135,34 @@ def _des_table(ws, des_t: set[str], des_b: list[tuple[str, str]]) -> None:
             ws[f"{c}{row}"].value = None
 
 
+def _paginate(ws) -> None:
+    """A system's four vials, and a block's header with the system under it, must not
+    straddle a page. xlsx has no keep-together, so walk the visible rows and drop a manual
+    break wherever the next indivisible chunk would overflow SAMPLING_PAGE_H. The template
+    did the same thing with fixed breaks every 23 rows; which rows survive here depends on
+    the campaign, so they are computed."""
+    vis = [r for r in range(1, ws.max_row + 1) if not ws.row_dimensions[r].hidden]
+    starts, after_title = [], False
+    for r in vis:
+        a = ws[f"A{r}"].value
+        if isinstance(a, str) and (_BLOCK_TITLE.match(a) or a.startswith("BINARIOS")):
+            starts.append(r)  # a header glues to the first system below it
+            after_title = True
+        elif a and _VIAL_CODE.search(str(ws[f"D{r}"].value or "")):
+            if not after_title:
+                starts.append(r)
+            after_title = False
+    acc = 0.0
+    for i, start in enumerate(starts):
+        end = starts[i + 1] if i + 1 < len(starts) else vis[-1] + 1
+        h = sum(ws.row_dimensions[r].height or DEFAULT_ROW_H for r in vis if start <= r < end)
+        if acc and acc + h > SAMPLING_PAGE_H:
+            ws.row_breaks.append(Break(id=max(r for r in vis if r < start)))
+            acc = h
+        else:
+            acc += h
+
+
 def _copy_sheet(src, wb, title: str):
     """Cross-workbook copy: values + styles attribute-wise (_style ids are per workbook),
     column widths, row heights, landscape fit-to-width. Manual page breaks are dropped:
@@ -170,6 +204,8 @@ def _sampling(wb, tubes: set[str], lab, keep_lab: set[int]) -> None:
     if bins := [t for t in missing if t.startswith("BIN")]:
         raise ValueError(f"Sampling: no rows for {bins}")
     row = last + 2
+    if missing:
+        ws.row_dimensions[last + 1].hidden = True  # spacer: belongs to no block
     for _letter, group in groupby(missing, key=lambda t: t[0]):
         codes = list(group)
         lab_row = next(r for r in keep_lab if lab[f"A{r}"].value == codes[0])
@@ -199,6 +235,7 @@ def _sampling(wb, tubes: set[str], lab, keep_lab: set[int]) -> None:
             ws.row_dimensions[r].height = SAMPLING_ROW_H
         elif ws[f"A{r}"].value == "System":
             ws.row_dimensions[r].height = SAMPLING_HEAD_H
+    _paginate(ws)
 
 
 def trim(wb, tubes: set[str]) -> None:

@@ -3,7 +3,14 @@ import pytest
 pytest.importorskip("openpyxl")
 import openpyxl
 
-from make_repeat_workbook import SAMPLING_HEAD_H, SAMPLING_ROW_H, SRC, trim
+from make_repeat_workbook import (
+    DEFAULT_ROW_H,
+    SAMPLING_HEAD_H,
+    SAMPLING_PAGE_H,
+    SAMPLING_ROW_H,
+    SRC,
+    trim,
+)
 
 
 def test_trim_hides_everything_but_the_repeat_tubes():
@@ -62,6 +69,25 @@ def test_trim_hides_everything_but_the_repeat_tubes():
     assert (sp["B224"].value, sp["B226"].value, sp["C227"].value) == ("Top", "Bot", 2)
     assert sp["J227"].value == '=IF(OR(H227="",I227=""),"",(H227+I227)/H227)'
     assert sp["A228"].value is None
+
+
+def test_no_system_straddles_a_page():
+    """The whole campaign: every page break must land on a system's last vial, and no page
+    may carry more rows than SAMPLING_PAGE_H."""
+    wb = openpyxl.load_workbook(SRC)
+    trim(wb, {"C4", "C5", "D1", "D2", "D3", "D5", "E1", "F2", "H1", "I1", "BIN1", "BIN3"})
+    ws = wb["Sampling"]
+    breaks = {b.id for b in ws.row_breaks.brk}
+    assert breaks, "a 12-tube campaign does not fit on one page"
+    for b in breaks:
+        assert str(ws[f"D{b}"].value or "").endswith("-B2"), f"break {b} splits a system"
+    acc = 0.0
+    for r in (x for x in range(1, ws.max_row + 1) if not ws.row_dimensions[x].hidden):
+        acc += ws.row_dimensions[r].height or DEFAULT_ROW_H
+        if r in breaks:
+            assert acc <= SAMPLING_PAGE_H
+            acc = 0.0
+    assert acc <= SAMPLING_PAGE_H
 
 
 def test_unknown_tube_is_an_error():
