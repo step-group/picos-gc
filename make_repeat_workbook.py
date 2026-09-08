@@ -36,6 +36,10 @@ LIST = _ROOT / "out" / "repeat_list.csv"
 OUT = _ROOT / "out" / "aromas_equilibrios_repeat.xlsx"
 _FEED_REF = re.compile(r"'2-phenylethanol_DES'!I(\d+)")
 LAB_ROWS, LAB_BIN_HEADER = range(10, 67), 58
+# Lab_DES weighing/record columns (W_tubo ... w_DES) and their "Anotar"/"Record on balance"
+# labels: the feed is only a guide to land in the two-phase region, the results come from
+# the sampled phases, so nothing is recorded there. Only the volume guide A-I stays.
+LAB_RECORD_COLS, LAB_RECORD_LABELS = "JKLMNOPQRST", ("D7", "F7")
 FEED_ROWS = range(6, 64)
 SAMPLING_SRC = _ROOT / "PLANTILLA_IMPRESION.xlsx"  # sheet "Sampling": printable vial sheets
 _BLOCK_TITLE = re.compile(r"^([A-Z]) — ")  # "C — ThyCarvac  (Thymol + Carvacrol)"
@@ -149,6 +153,10 @@ def trim(wb, tubes: set[str]) -> None:
         _backfill(lab, r)
     has_bin = any(t.startswith("BIN") for t in tubes)
     _hide(lab, LAB_ROWS, keep_lab | ({LAB_BIN_HEADER} if has_bin else set()))
+    for col in LAB_RECORD_COLS:
+        lab.column_dimensions[col].hidden = True
+    for cell in LAB_RECORD_LABELS:
+        lab[cell].value = None
 
     des = {lab[f"B{r}"].value for r in keep_lab}  # after back-fill every kept row names it
     for sheet, rows, cols in DES_TABLES:

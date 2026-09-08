@@ -13,6 +13,10 @@ def test_trim_hides_everything_but_the_repeat_tubes():
     visible = [lab[f"A{r}"].value for r in range(10, 67) if not lab.row_dimensions[r].hidden]
     assert visible == ["C4", "I1", "#", "BIN1"]  # "#" = the binary header row 58
     assert (lab["B25"].value, lab["D25"].value) == ("ThyCarvac", "Carvacrol")  # back-filled
+    # only the volume guide stays: weighing/record columns hidden, their labels cleared
+    assert all(lab.column_dimensions[c].hidden for c in "JKLMNOPQRST")
+    assert not lab.column_dimensions["I"].hidden and not lab.column_dimensions["U"].hidden
+    assert (lab["B7"].value, lab["D7"].value, lab["F7"].value) == ("Guía", None, None)
     feed = wb["2-phenylethanol_DES"]
     assert not feed.row_dimensions[21].hidden  # C4's feed row (Lab_DES!G25 -> I21)
     assert all(feed.row_dimensions[r].hidden for r in (6, 20, 22))
