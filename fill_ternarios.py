@@ -47,7 +47,7 @@ BINARIOS_CSV = _ROOT / "out" / "BINARIOS_TERPENOS" / "samples.csv"
 # "Geraniol" in samples.csv (the binary-method RT is miscalibrated), so blocks A & F route
 # their Carvone area through fill_binary's single-remaining-terpene fallback (right value,
 # wrong label). All 8 blocks map; a block only resolves an endpoint once its masses + KF
-# are hand-entered on rows 25-28, so today only block A computes.
+# are hand-entered on rows 25-28 (all 8 blocks have masses + organic KF today).
 BIN_TO_BLOCK = {1: "A", 2: "B", 3: "C", 4: "D", 5: "E", 6: "F", 7: "H", 8: "I"}
 
 TERPS = ("camph", "carvone", "carvacrol", "geraniol", "thymol", "eugenol")
@@ -73,6 +73,32 @@ CLOSURE_BAND = (0.5, 1.5)
 MISMATCH_MAX = 3.0
 MISMATCH_MIN_FRAC = 0.1  # only judge mismatch on a real constituent, not trace wobble
 ORGANIC_WATER_MAX = 0.5  # KF anchor only the water-poor (organic) phase; see results_rows
+# Pure-water solubility at 30 °C, mass fraction (g/L / 1000), from the thesis
+# data/raw/solubility/water_terpene/measurements.csv: thymol, carvacrol, eugenol, geraniol
+# = Martins et al. 2017 (303.15 K shake-flask); carvone = Smyrl & LeMaguer 1980 (303.15 K);
+# camphor = Yalkowsky compilation, 1.0-2.1 g/L at 293-298 K and 2.5 at 310 K, so ~2.0.
+# An aqueous vial whose HBA+HBD exceeds the PAIR's summed solubility took organic-phase
+# droplets — even both terpenes at saturation cannot reach it (clean vials here sit at
+# 0.1-0.6 g/L). ponytail: 30 °C only; geraniol climbs steeply above (5.5 g/L at 40 °C),
+# so add a temperature argument if a block was equilibrated warmer.
+AQ_SOLUBILITY_30C = {
+    "thymol": 0.00111,
+    "carvacrol": 0.00129,
+    "eugenol": 0.00210,
+    "geraniol": 0.00119,
+    "carvone": 0.00161,
+    "camphor": 0.00200,
+}
+AQ_SOLUBILITY_TOL = 1.2  # +20 %: shake-flask literature scatters by that much between labs
+
+
+def aq_terpene_max(hba, hbd) -> float:
+    """Droplet ceiling for a pair: sum of the two pure-water solubilities (mass fraction)
+    × AQ_SOLUBILITY_TOL. An unknown name counts 0.0025, i.e. an unlabelled pair falls back
+    to the old 0.5 % (× tolerance)."""
+    return AQ_SOLUBILITY_TOL * sum(
+        AQ_SOLUBILITY_30C.get(canon(n or ""), 0.0025) for n in (hba, hbd)
+    )
 
 
 def parse_key(code: str) -> tuple[int, str, int] | None:
@@ -200,41 +226,75 @@ def fill_binary(ws, block: str, bin_areas: dict, warn: list[str]) -> None:
                     "used the other terpene"
                 )
             else:
-                warn.append(f"{block}: binary HBD ambiguous in BIN{binnum} {ph}{rep} ({list(terp)})")
+                warn.append(
+                    f"{block}: binary HBD ambiguous in BIN{binnum} {ph}{rep} ({list(terp)})"
+                )
 
 
-def _binary_bydiff(ws, reps: tuple[int, int], g2, h2) -> list[float] | None:
-    """Binary endpoint (HBA, HBD, water) by difference — no KF. Per rep: dilution
-    df=(H-D)/(F-D), HBA=M/g2*df/100, HBD=N/h2*df/100, water=1-HBA-HBD; average the reps.
-    Returns None if slopes, masses, or areas are missing (can't compute without them)."""
-    if not (g2 and h2):
-        return None
-    hbas, hbds = [], []
+BIN_PAIRS = ((25, (25, 26)), (27, (27, 28)))  # binary endpoint anchor row -> its two vials
+
+
+def binary_vials(ws, reps: tuple[int, int], g2, h2) -> list[dict]:
+    """Per-vial fractions for the binary rows, same shape as vial_fractions (2PE = 0).
+    Read from the RAW cells (masses D/F/H, areas M/N, KF U/V), never from the sheet's
+    cached binary formulas: those go stale between recalcs (Bloque H's cached AA25 read
+    0.35 while the raw cells close at 0.94). A vial with no KF is taken as aqueous with
+    water by difference when its terpenes are < 0.5; an organic vial needs its KF."""
+    out = []
     for r in reps:
         d, f, h = _num(ws, f"D{r}"), _num(ws, f"F{r}"), _num(ws, f"H{r}")
         m, n = _num(ws, f"M{r}"), _num(ws, f"N{r}")
-        if None in (d, f, h, m, n) or (f - d) == 0:
+        if None in (d, f, h, m, n) or f == d or not (g2 and h2):
             continue
-        df = (h - d) / (f - d)
-        hbas.append(m / g2 * df / 100)
-        hbds.append(n / h2 * df / 100)
-    if not hbas:
-        return None
-    hba, hbd = sum(hbas) / len(hbas), sum(hbds) / len(hbds)
-    return [hba, hbd, 1.0 - hba - hbd]
+        rec = {"row": r, "L": None, "M": m, "N": n, "I": f - d, "K": h - d,
+               "U": _num(ws, f"U{r}"), "V": _num(ws, f"V{r}")}  # fmt: skip
+        v = vial_fractions(rec, None, g2, h2)
+        if v is None:
+            continue
+        v["s"] = 0.0
+        if not v["kf"] and _terp(v) < ORGANIC_WATER_MAX:
+            v["kf"] = [1.0 - _terp(v)]  # aqueous, water by difference
+        if v["kf"]:
+            out.append(v)
+    return out
+
+
+def binary_endpoint(
+    vials: list[dict], terp_max: float
+) -> tuple[list[float] | None, float | None, str, list[str], list[dict]]:
+    """One binary endpoint from its vials: ([HBA, HBD, water], closure, water_src, flags,
+    kept). Same chain as the ternaries: cherry-pick via aqueous_keep, organic (water <
+    ORGANIC_WATER_MAX) KF-anchored, aqueous water by difference. Closure only means
+    something with a real KF, so it is None for by-difference aqueous endpoints."""
+    kept = aqueous_keep(vials, terp_max)
+    if not kept:
+        return None, None, "", [], kept
+    a = sum(_terp_a(v) for v in kept) / len(kept)
+    b = sum(v["b"] or 0.0 for v in kept) / len(kept)
+    kf = [c for v in kept for c in v["kf"]]
+    w = sum(kf) / len(kf)
+    flags = ["dropped_replicate"] if len(kept) < len(vials) else []
+    if w < ORGANIC_WATER_MAX:
+        (_, x, y, z), closure = kf_anchor(0.0, a, b, w)
+        src = "kf"
+        lo, hi = CLOSURE_BAND
+        if not (lo <= closure <= hi):
+            flags.append("low_closure")
+        if _replicate_mismatch([v["raw"] for v in kept], 0.0, a, b) > MISMATCH_MAX:
+            flags.append("replicate_mismatch")
+    else:
+        x, y, z, closure, src = a, b, max(0.0, 1.0 - a - b), None, "bydiff"
+    return [x, y, z], closure, src, flags, kept
+
+
+def _terp_a(v: dict) -> float:
+    return v["a"] or 0.0
 
 
 def binary_tieline_rows(wb_d) -> list[list]:
-    """Water-solvent binary endpoints from a recalc'd (data_only) workbook: rows 25/27,
-    cols AE/AF/AG = HBA/HBD/water mass fractions (2PE = 0).
-
-    The pre-wired formula is KF-anchored. When its endpoint resolves (areas+masses+KF)
-    we use it (`water_src=kf`); when KF is blank (e.g. the operator dropped the unreliable
-    high-water aqueous KF) the formula errors, so we fall back to water **by difference**
-    from areas+masses (`water_src=bydiff`) — but only for a genuinely aqueous endpoint
-    (resulting water > 0.5), since by-difference is unreliable for the water-poor organic
-    phase. A block with no masses yields neither and contributes nothing. Skips the
-    degenerate pure-water point (AE=AF=0 when masses+KF but no areas are present)."""
+    """Water-solvent binary endpoints, rows 25/26 and 27/28 of each sheet, computed from
+    the raw cells via binary_endpoint (HBA, HBD, water mass fractions; 2PE = 0). A pair
+    with no usable vial (no masses, no areas, or organic without KF) contributes nothing."""
     out = []
     for sheet in wb_d.sheetnames:
         ws = wb_d[sheet]
@@ -243,17 +303,17 @@ def binary_tieline_rows(wb_d) -> list[list]:
         block = sheet.split()[-1]
         hba, hbd = ws["M3"].value, ws["N3"].value
         g2, h2 = _num(ws, "G2"), _num(ws, "H2")
-        for row, reps in ((25, (25, 26)), (27, (27, 28))):
-            ae, af, ag = _num(ws, f"AE{row}"), _num(ws, f"AF{row}"), _num(ws, f"AG{row}")
-            src = "kf"
-            if None in (ae, af, ag) or (ae == 0 and af == 0):
-                bd = _binary_bydiff(ws, reps, g2, h2)
-                if bd is None or bd[2] <= 0.5:  # no data, or organic phase w/o KF (untrustworthy)
-                    continue
-                ae, af, ag = bd
-                src = "bydiff"
-            phase = "aqueous" if ag > 0.5 else "organic"
-            out.append([block, phase, hba, _fmt(ae), hbd, _fmt(af), _fmt(ag), src])
+        terp_max = aq_terpene_max(hba, hbd)
+        for _row, reps in BIN_PAIRS:
+            point, _closure, src, _flags, _kept = binary_endpoint(
+                binary_vials(ws, reps, g2, h2), terp_max
+            )
+            if point is None:
+                continue
+            phase = "aqueous" if point[2] > ORGANIC_WATER_MAX else "organic"
+            out.append(
+                [block, phase, hba, _fmt(point[0]), hbd, _fmt(point[1]), _fmt(point[2]), src]
+            )
     return out
 
 
@@ -400,6 +460,45 @@ def _replicate_mismatch(g: list[dict], w, x, y) -> float:
     return max(areas) / min(areas)
 
 
+def vial_fractions(r: dict, f2, g2, h2) -> dict | None:
+    """One vial's raw mass fractions {s: 2PE, a: HBA, b: HBD, kf: [water...]} from its
+    areas, slopes and dilution K/I. None when the dilution is missing."""
+    df = (r["K"] / r["I"]) if (r["K"] and r["I"]) else None
+    if df is None:
+        return None
+    s = (r["L"] / f2 * df / 100) if (f2 and r["L"] is not None) else None
+    a = (r["M"] / g2 * df / 100) if (g2 and r["M"] is not None) else None
+    b = (r["N"] / h2 * df / 100) if (h2 and r["N"] is not None) else None
+    ks = [c / 100 for c in (r["U"], r["V"]) if c is not None]
+    return {"s": s, "a": a, "b": b, "kf": ks, "raw": r}
+
+
+def _terp(v: dict) -> float:
+    return (v["a"] or 0.0) + (v["b"] or 0.0)
+
+
+def aqueous_keep(vials: list[dict], terp_max: float) -> list[dict]:
+    """The vials of one phase worth averaging. Drops (1) a vial that sampled the wrong
+    phase — majority-water AND majority-organic at once (E2 Superior: ~96 % KF water with
+    a full organic terpene load); (2) an aqueous vial that took organic-phase droplets —
+    terpenes above `terp_max` (see aq_terpene_max) — when its pair is clean, since
+    carryover only ever adds organics. If every vial fails, keep them all (the point stays
+    flagged downstream)."""
+
+    def water(v):
+        return sum(v["kf"]) / len(v["kf"]) if v["kf"] else 0.0
+
+    def mixup(v):
+        gc = sum(c for c in (v["s"], v["a"], v["b"]) if c is not None)
+        return water(v) > ORGANIC_WATER_MAX and gc > 0.5
+
+    keep = [v for v in vials if not mixup(v)] or vials
+    if any(water(v) >= ORGANIC_WATER_MAX for v in keep):  # aqueous phase
+        clean = [v for v in keep if _terp(v) <= terp_max]
+        keep = clean or keep
+    return keep
+
+
 def results_rows(ws, block: str, recs: list[dict], aqueous_bydiff: bool = True) -> list[list]:
     """Replicate the sheet formula chain -> one normalized ternary point per (system, phase).
 
@@ -420,28 +519,9 @@ def results_rows(ws, block: str, recs: list[dict], aqueous_bydiff: bool = True) 
         # phase* than its pair can be dropped — averaging a mixed pair otherwise makes a
         # mid-triangle phantom (E2 Superior = one genuine aqueous vial + one that read
         # ~96% KF water yet carried a full organic terpene load).
-        vials = []
-        for r in g:
-            df = (r["K"] / r["I"]) if (r["K"] and r["I"]) else None
-            if df is None:
-                continue
-            s = (r["L"] / f2 * df / 100) if (f2 and r["L"] is not None) else None
-            a = (r["M"] / g2 * df / 100) if (g2 and r["M"] is not None) else None
-            b = (r["N"] / h2 * df / 100) if (h2 and r["N"] is not None) else None
-            ks = [c / 100 for c in (r["U"], r["V"]) if c is not None]
-            vials.append({"s": s, "a": a, "b": b, "kf": ks, "raw": r})
-
-        def _is_mixup(v):
-            # Majority-water AND majority-organic at once: impossible for one phase, so
-            # this vial sampled the wrong phase. (Concentrated organics close >1 but are
-            # water-poor; aqueous vials are organic-poor — neither trips this.)
-            water = sum(v["kf"]) / len(v["kf"]) if v["kf"] else 0.0
-            gc = sum(c for c in (v["s"], v["a"], v["b"]) if c is not None)
-            return water > 0.5 and gc > 0.5
-
-        keep = [v for v in vials if not _is_mixup(v)]
-        use = keep if keep else vials  # if every vial is a mixup, keep all (stays flagged)
-        dropped = 0 < len(use) < len(vials)
+        vials = [v for r in g if (v := vial_fractions(r, f2, g2, h2)) is not None]
+        use = aqueous_keep(vials, aq_terpene_max(hba_name, hbd_name))
+        dropped = len(use) < len(vials)
 
         def avg(xs):
             return sum(xs) / len(xs) if xs else None
@@ -449,7 +529,10 @@ def results_rows(ws, block: str, recs: list[dict], aqueous_bydiff: bool = True) 
         sol = [v["s"] for v in use if v["s"] is not None]
         hba = [v["a"] for v in use if v["a"] is not None]
         hbd = [v["b"] for v in use if v["b"] is not None]
-        kf = [c for v in use for c in v["kf"]]
+        # KF from the kept vials; if the kept vial was never titrated, fall back to the
+        # pair's (I2 Superior: the clean vial has no KF). Aqueous water is by difference
+        # anyway, so the KF only classifies the phase and feeds the closure diagnostic.
+        kf = [c for v in use for c in v["kf"]] or [c for v in vials for c in v["kf"]]
         w, x, y, z = avg(sol), avg(hba), avg(hbd), avg(kf)
         flags = [] if (g2 and h2) else ["slopes_missing"]
         closure = None
@@ -685,7 +768,9 @@ def main() -> None:
         w = csv.writer(fh)
         w.writerow(["block", "phase", "HBA", "HBA_wt", "HBD", "HBD_wt", "water", "water_src"])
         w.writerows(bin_rows)
-    print(f"\nWrote {WB_OUT}\nWrote {OUT_CSV}\nWrote {BIN_OUT_CSV} ({len(bin_rows)} binary endpoint(s))")
+    print(
+        f"\nWrote {WB_OUT}\nWrote {OUT_CSV}\nWrote {BIN_OUT_CSV} ({len(bin_rows)} binary endpoint(s))"
+    )
     run_tieline_plots(warn)
     if warn:
         print("\nWARNINGS:")
