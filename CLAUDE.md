@@ -87,5 +87,8 @@ a `repeat=yes` point in `out/repeat_list.csv` (binaries as `BIN<n>` via `BIN_TO_
 and writes `out/aromas_equilibrios_repeat.xlsx`. Other tubes are **hidden, not deleted**
 (the volume estimates are cross-sheet formulas openpyxl would not rewrite; unhide to get
 the full book back). Every kept ternary tube gets its four GC vials appended to `Sheet2`
-as `C4-T1` … `C4-B2` (hyphen, like the `BIN1-T1` rows; `CODE_RE` accepts it). Test:
+as `C4-T1` … `C4-B2` (hyphen, like the `BIN1-T1` rows; `CODE_RE` accepts it). The DES
+prep tables (`datos_des` 10 g, `Sheet1` 5 g) are cropped to the DES those tubes use, and
+the console prints the grams of each DES they consume (cached `Lab_DES` estimates;
+binaries as 4 mL) so `C15` can be sized. Test:
 `tests/test_make_repeat_workbook.py` (same no-project invocation).

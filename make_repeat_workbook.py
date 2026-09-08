@@ -35,6 +35,10 @@ OUT = _ROOT / "out" / "aromas_equilibrios_repeat.xlsx"
 _FEED_REF = re.compile(r"'2-phenylethanol_DES'!I(\d+)")
 LAB_ROWS, LAB_BIN_HEADER = range(10, 67), 58
 FEED_ROWS, GC_ROWS, GC_HEADER, GC_APPEND = range(6, 64), range(4, 43), 3, 44
+# DES prep tables: (sheet, data rows, columns holding the DES name). Sheet1 is the 5 g
+# variant laid out as two side-by-side tables (names in A and N).
+DES_TABLES = (("datos_des", range(17, 26), "B"), ("Sheet1", range(4, 13), "AN"))
+BIN_V_DES_ML = 4  # Lab_DES F59:F66 (binary rows carry V_DES in F, no density)
 
 
 def tubes_from_list(path: Path) -> set[str]:
@@ -81,6 +85,13 @@ def trim(wb, tubes: set[str]) -> None:
     has_bin = any(t.startswith("BIN") for t in tubes)
     _hide(lab, LAB_ROWS, keep_lab | ({LAB_BIN_HEADER} if has_bin else set()))
 
+    des = {lab[f"B{r}"].value for r in keep_lab}  # after back-fill every kept row names it
+    for sheet, rows, cols in DES_TABLES:
+        ws = wb[sheet]
+        if missing := des - {ws[f"{c}{r}"].value for r in rows for c in cols}:
+            raise ValueError(f"{sheet}: no prep row for {sorted(missing)}")
+        _hide(ws, rows, {r for r in rows if any(ws[f"{c}{r}"].value in des for c in cols)})
+
     feed = wb["2-phenylethanol_DES"]
     keep_feed = set()
     for r in keep_lab:
@@ -109,6 +120,27 @@ def trim(wb, tubes: set[str]) -> None:
             gc[f"C{row}"], gc[f"D{row}"] = rep, f"{tube}-{tag}{rep}"
 
 
+def des_need(tubes: set[str]) -> dict[str, float]:
+    """Grams of each DES the kept tubes consume, from Lab_DES' cached estimates
+    (ternary rows: V_DES est [I] x rho_DES est [F]; binary rows: 4 mL x that DES' rho)."""
+    lab = openpyxl.load_workbook(SRC, data_only=True)["Lab_DES"]
+    rows = {r: lab[f"A{r}"].value for r in LAB_ROWS}
+    des_of, rho = {}, {}
+    for r, code in rows.items():  # block labels only on first rows: carry the DES down
+        if lab[f"B{r}"].value:
+            block_des = lab[f"B{r}"].value
+        if code:
+            des_of[r] = block_des
+            if r < LAB_BIN_HEADER:
+                rho[block_des] = lab[f"F{r}"].value
+    need: dict[str, float] = {}
+    for r, code in rows.items():
+        if code in tubes:
+            ml = lab[f"I{r}"].value if r < LAB_BIN_HEADER else BIN_V_DES_ML
+            need[des_of[r]] = need.get(des_of[r], 0) + ml * rho.get(des_of[r], 1.0)
+    return need
+
+
 def main() -> None:
     tubes = tubes_from_list(LIST) | set(sys.argv[1:])
     wb = openpyxl.load_workbook(SRC)
@@ -118,6 +150,10 @@ def main() -> None:
     order = sorted(tubes, key=lambda t: (t.startswith("BIN"), t))
     n_tern = sum(not t.startswith("BIN") for t in tubes)
     print(f"{len(tubes)} tubes: {' '.join(order)}; {4 * n_tern} ternary GC vials. Wrote {OUT}")
+    print(
+        "DES needed (est.): "
+        + ", ".join(f"{d} {g:.1f} g" for d, g in sorted(des_need(tubes).items()))
+    )
 
 
 if __name__ == "__main__":
