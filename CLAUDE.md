@@ -61,14 +61,18 @@ aqueous KF was measured).
 ## Repeat audit
 `uv run audit_repeats.py` reads `Sistemas ternarios_MF_filled.xlsx` only (no `out/` needed)
 and writes `out/repeat_list.csv`: one row per (system, phase) point, ternary **and** binary,
-with a `repeat` verdict. Reasons: `missing_vials`, `single_vial` (blank L/M/N = never
-injected), `low_closure`, `replicate_mismatch`, `dropped_replicate` (the last three via
-`fill_ternarios.results_rows`, so they match the pipeline), and `aqueous_organics_suspect`
-(organic droplets in an aqueous vial: terpenes above `AQ_TERPENE_MAX` = 0.5 %, or the two
-vials' total organics differing > 3x; the pipeline's `replicate_mismatch` is gated on a
-component > 10 % and so never fires on aqueous phases). Points with no vials (C4, C5)
-appear here but are **absent** from `ternarios_resultados.csv`. A single KF titration is
-reported as `n_kf`, not a repeat reason. Re-run `fill_ternarios.py` first if the master
+with a `repeat` verdict. Reasons: `missing_vials` (blank L/M/N = never injected),
+`low_closure`, `replicate_mismatch` (both via `fill_ternarios.results_rows`, so they match
+the pipeline), `aqueous_organics_suspect` (organic droplets in **every** kept aqueous vial:
+terpenes above `AQ_TERPENE_MAX` = 0.5 %) and `aqueous_replicate_mismatch` (kept aqueous
+vials' total organics differ > 3x with no droplet signature; the pipeline's
+`replicate_mismatch` is gated on a component > 10 % and never fires on aqueous phases).
+Informational, never a repeat: `single_vial` (one clean vial is accepted) and
+`dropped_replicate` — `fill_ternarios.aqueous_keep` already cherry-picks: it drops a vial
+that sampled the wrong phase (E2) or an aqueous vial with droplets whose pair is clean (D2,
+D5, F5, I2), and the `dropped` column names it. Points with no vials (C4, C5) appear here
+but are **absent** from `ternarios_resultados.csv`. A single KF titration is reported as
+`n_kf`, not a repeat reason. Re-run `fill_ternarios.py` first if the master
 workbook changed. Printable lab worksheet (checkboxes, sample codes, per-reason action):
 `typst compile repeat_list.typ out/repeat_list.pdf` — it reads the CSV, no Python. Test without the project venv (it cannot sync while `pcsaft-quaternary`
 is an empty gitlink): `uv run --no-project --with openpyxl --with pytest pytest --noconftest

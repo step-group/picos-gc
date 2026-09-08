@@ -73,6 +73,11 @@ CLOSURE_BAND = (0.5, 1.5)
 MISMATCH_MAX = 3.0
 MISMATCH_MIN_FRAC = 0.1  # only judge mismatch on a real constituent, not trace wobble
 ORGANIC_WATER_MAX = 0.5  # KF anchor only the water-poor (organic) phase; see results_rows
+# Aqueous vial carrying more terpenes (HBA+HBD mass fraction) than this took organic-phase
+# droplets: water dissolves ~0.1-0.25 % of each of these terpenes and clean aqueous vials
+# here sit at 0.01-0.05 %. ponytail: one fixed ceiling above the summed solubility of any
+# pair; make it per-pair (solubility table) if a legit 2PE-cosolvency case ever exceeds it.
+AQ_TERPENE_MAX = 0.005
 
 
 def parse_key(code: str) -> tuple[int, str, int] | None:
@@ -200,7 +205,9 @@ def fill_binary(ws, block: str, bin_areas: dict, warn: list[str]) -> None:
                     "used the other terpene"
                 )
             else:
-                warn.append(f"{block}: binary HBD ambiguous in BIN{binnum} {ph}{rep} ({list(terp)})")
+                warn.append(
+                    f"{block}: binary HBD ambiguous in BIN{binnum} {ph}{rep} ({list(terp)})"
+                )
 
 
 def _binary_bydiff(ws, reps: tuple[int, int], g2, h2) -> list[float] | None:
@@ -413,6 +420,31 @@ def vial_fractions(r: dict, f2, g2, h2) -> dict | None:
     return {"s": s, "a": a, "b": b, "kf": ks, "raw": r}
 
 
+def _terp(v: dict) -> float:
+    return (v["a"] or 0.0) + (v["b"] or 0.0)
+
+
+def aqueous_keep(vials: list[dict]) -> list[dict]:
+    """The vials of one phase worth averaging. Drops (1) a vial that sampled the wrong
+    phase — majority-water AND majority-organic at once (E2 Superior: ~96 % KF water with
+    a full organic terpene load); (2) an aqueous vial that took organic-phase droplets —
+    terpenes above AQ_TERPENE_MAX — when its pair is clean, since carryover only ever adds
+    organics. If every vial fails, keep them all (the point stays flagged downstream)."""
+
+    def water(v):
+        return sum(v["kf"]) / len(v["kf"]) if v["kf"] else 0.0
+
+    def mixup(v):
+        gc = sum(c for c in (v["s"], v["a"], v["b"]) if c is not None)
+        return water(v) > ORGANIC_WATER_MAX and gc > 0.5
+
+    keep = [v for v in vials if not mixup(v)] or vials
+    if any(water(v) >= ORGANIC_WATER_MAX for v in keep):  # aqueous phase
+        clean = [v for v in keep if _terp(v) <= AQ_TERPENE_MAX]
+        keep = clean or keep
+    return keep
+
+
 def results_rows(ws, block: str, recs: list[dict], aqueous_bydiff: bool = True) -> list[list]:
     """Replicate the sheet formula chain -> one normalized ternary point per (system, phase).
 
@@ -434,18 +466,8 @@ def results_rows(ws, block: str, recs: list[dict], aqueous_bydiff: bool = True) 
         # mid-triangle phantom (E2 Superior = one genuine aqueous vial + one that read
         # ~96% KF water yet carried a full organic terpene load).
         vials = [v for r in g if (v := vial_fractions(r, f2, g2, h2)) is not None]
-
-        def _is_mixup(v):
-            # Majority-water AND majority-organic at once: impossible for one phase, so
-            # this vial sampled the wrong phase. (Concentrated organics close >1 but are
-            # water-poor; aqueous vials are organic-poor — neither trips this.)
-            water = sum(v["kf"]) / len(v["kf"]) if v["kf"] else 0.0
-            gc = sum(c for c in (v["s"], v["a"], v["b"]) if c is not None)
-            return water > 0.5 and gc > 0.5
-
-        keep = [v for v in vials if not _is_mixup(v)]
-        use = keep if keep else vials  # if every vial is a mixup, keep all (stays flagged)
-        dropped = 0 < len(use) < len(vials)
+        use = aqueous_keep(vials)
+        dropped = len(use) < len(vials)
 
         def avg(xs):
             return sum(xs) / len(xs) if xs else None
@@ -453,7 +475,10 @@ def results_rows(ws, block: str, recs: list[dict], aqueous_bydiff: bool = True) 
         sol = [v["s"] for v in use if v["s"] is not None]
         hba = [v["a"] for v in use if v["a"] is not None]
         hbd = [v["b"] for v in use if v["b"] is not None]
-        kf = [c for v in use for c in v["kf"]]
+        # KF from the kept vials; if the kept vial was never titrated, fall back to the
+        # pair's (I2 Superior: the clean vial has no KF). Aqueous water is by difference
+        # anyway, so the KF only classifies the phase and feeds the closure diagnostic.
+        kf = [c for v in use for c in v["kf"]] or [c for v in vials for c in v["kf"]]
         w, x, y, z = avg(sol), avg(hba), avg(hbd), avg(kf)
         flags = [] if (g2 and h2) else ["slopes_missing"]
         closure = None
@@ -689,7 +714,9 @@ def main() -> None:
         w = csv.writer(fh)
         w.writerow(["block", "phase", "HBA", "HBA_wt", "HBD", "HBD_wt", "water", "water_src"])
         w.writerows(bin_rows)
-    print(f"\nWrote {WB_OUT}\nWrote {OUT_CSV}\nWrote {BIN_OUT_CSV} ({len(bin_rows)} binary endpoint(s))")
+    print(
+        f"\nWrote {WB_OUT}\nWrote {OUT_CSV}\nWrote {BIN_OUT_CSV} ({len(bin_rows)} binary endpoint(s))"
+    )
     run_tieline_plots(warn)
     if warn:
         print("\nWARNINGS:")

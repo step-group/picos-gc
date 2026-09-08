@@ -10,16 +10,21 @@ fill_ternarios' own composition chain (results_rows) so closure/flags here equal
 the pipeline's. Binary edge rows 25-28 get the same treatment (fill_ternarios'
 binary export carries no closure at all).
 
-Repeat reasons: missing_vials, single_vial, low_closure, replicate_mismatch,
-dropped_replicate, aqueous_organics_suspect. A single KF titration is reported
-(n_kf) but is not a reason.
+Repeat reasons: missing_vials, low_closure, replicate_mismatch,
+aqueous_organics_suspect, aqueous_replicate_mismatch. Informational only (in
+`flags`, never a repeat): single_vial (one clean vial is accepted), dropped_replicate
+(the pipeline already cherry-picked the clean vial, see fill_ternarios.aqueous_keep),
+a single KF titration (n_kf).
 
-aqueous_organics_suspect = organic-phase droplets carried into an aqueous sample.
-The pipeline's replicate_mismatch is gated on a component > 10 %, which an aqueous
-phase never has, so it is blind there. Two signals, either one fires: a vial whose
-terpenes (HBA+HBD) exceed AQ_TERPENE_MAX (water dissolves ~0.1-0.25 % of each of
-these terpenes; typical aqueous vials here sit at 0.01-0.05 %), or the two vials'
-total organics (2PE+HBA+HBD) differing by more than MISMATCH_MAX x.
+aqueous_organics_suspect = organic-phase droplets in EVERY kept aqueous vial (terpenes
+HBA+HBD above AQ_TERPENE_MAX; nothing left to cherry-pick).
+aqueous_replicate_mismatch = the kept aqueous vials' total organics (2PE+HBA+HBD)
+differ > MISMATCH_MAX x without the terpene signature of droplets (a 2PE-only
+disagreement). The pipeline's replicate_mismatch is gated on a component > 10 %,
+which an aqueous phase never has, so it is blind there. ponytail: no cherry-pick
+here — the only reference would be the same tie-line's organic phase via the 2PE
+distribution coefficient (40-50 in every clean system), and the one current case
+(D1) has a broken organic phase; add that pick when a case with a sound one appears.
 
 Run: uv run audit_repeats.py   ->  out/repeat_list.csv + console table
 """
@@ -32,13 +37,16 @@ from pathlib import Path
 import openpyxl
 
 from fill_ternarios import (
+    AQ_TERPENE_MAX,
     BIN_TO_BLOCK,
     CLOSURE_BAND,
     MISMATCH_MAX,
     ORGANIC_WATER_MAX,
     _binary_bydiff,
     _num,
+    _terp,
     _vial_rows,
+    aqueous_keep,
     results_rows,
     vial_fractions,
 )
@@ -46,14 +54,11 @@ from fill_ternarios import (
 _ROOT = Path(__file__).resolve().parent
 WB = _ROOT / "Sistemas ternarios_MF_filled.xlsx"
 OUT = _ROOT / "out" / "repeat_list.csv"
-REPEAT_FLAGS = ("low_closure", "replicate_mismatch", "dropped_replicate")
-# ponytail: fixed ceiling above the summed water solubility of any two of these terpenes;
-# make it per-pair (solubility table) if a legit 2PE-cosolvency case ever exceeds it.
-AQ_TERPENE_MAX = 0.005
+REPEAT_FLAGS = ("low_closure", "replicate_mismatch")
 COLS = [
-    "kind", "block", "system", "phase", "hba", "hbd", "codes", "n_expected", "n_with_areas",
-    "n_vials_used", "n_kf", "closure", "water_src", "aq_terpene_max", "aq_organics_ratio",
-    "flags", "repeat", "reason",
+    "kind", "block", "system", "phase", "hba", "hbd", "codes", "dropped", "n_expected",
+    "n_with_areas", "n_vials_used", "n_kf", "closure", "water_src", "aq_terpene_max",
+    "aq_organics_ratio", "flags", "repeat", "reason",
 ]  # fmt: skip
 _BIN_CODE = {25: "T1", 26: "T2", 27: "B1", 28: "B2"}  # fill_ternarios._BIN_ROWS inverted
 
@@ -72,17 +77,22 @@ def _n_kf(ws, rows) -> int:
     return sum(_num(ws, f"{c}{r}") is not None for r in rows for c in "UV")
 
 
-def _aqueous_organics(vials: list[dict]) -> tuple[float | None, float | None, bool]:
-    """(max terpene fraction, max/min total-organics ratio, suspect?) over an aqueous
-    phase's vials. None/False when the phase is organic or has no usable vial."""
-    kf = [c for v in vials for c in v["kf"]]
-    if not kf or sum(kf) / len(kf) < ORGANIC_WATER_MAX:
-        return None, None, False
-    terp = [(v["a"] or 0) + (v["b"] or 0) for v in vials]
-    tot = [(v["s"] or 0) + t for v, t in zip(vials, terp, strict=True)]
+def _aqueous_organics(
+    kept: list[dict], all_kf: list[float]
+) -> tuple[float | None, float | None, list[str]]:
+    """(max terpene fraction, max/min total-organics ratio, repeat reasons) over the KEPT
+    vials of an aqueous phase. (None, None, []) when the phase is organic or empty."""
+    if not all_kf or sum(all_kf) / len(all_kf) < ORGANIC_WATER_MAX or not kept:
+        return None, None, []
+    terp = [_terp(v) for v in kept]
+    tot = [(v["s"] or 0) + t for v, t in zip(kept, terp, strict=True)]
     ratio = (max(tot) / min(tot)) if len(tot) > 1 and min(tot) > 0 else None
-    suspect = max(terp) > AQ_TERPENE_MAX or (ratio is not None and ratio > MISMATCH_MAX)
-    return max(terp), ratio, suspect
+    reasons = []
+    if min(terp) > AQ_TERPENE_MAX:  # every kept vial carries droplets: nothing to pick
+        reasons.append("aqueous_organics_suspect")
+    elif ratio is not None and ratio > MISMATCH_MAX:  # 2PE-only disagreement
+        reasons.append("aqueous_replicate_mismatch")
+    return max(terp), ratio, reasons
 
 
 def _verdict(row: dict, flags: str) -> dict:
@@ -90,10 +100,9 @@ def _verdict(row: dict, flags: str) -> dict:
     if row["n_with_areas"] == 0:
         reason.append("missing_vials")
     elif row["n_with_areas"] < row["n_expected"]:
-        reason.append("single_vial")
+        flags = ";".join(f for f in (flags, "single_vial") if f)
     reason += [f for f in flags.split(";") if f in REPEAT_FLAGS]
-    if row.pop("aq_suspect", False):
-        reason.append("aqueous_organics_suspect")
+    reason += row.pop("aq_reasons", [])
     row["flags"] = flags
     row["repeat"] = "yes" if reason else "no"
     row["reason"] = ";".join(reason)
@@ -132,12 +141,16 @@ def _ternary(ws, block: str) -> list[dict]:
             if (r["sysnum"], r["ph"]) == (sysnum, ph)
             and (v := vial_fractions(r, f2, g2, h2)) is not None
         ]
-        terp, ratio, suspect = _aqueous_organics(vials)
+        kept = aqueous_keep(vials)
+        terp, ratio, aq_reasons = _aqueous_organics(kept, [c for v in vials for c in v["kf"]])
         have = [_has_areas(ws, r) for r in rows]
+        reps = [f"{ph}{i}" for i in range(1, len(rows) + 1)]
+        dropped = [v["raw"]["row"] for v in vials if v not in kept]
         row = {
             "kind": "ternary", "block": block, "system": system, "phase": phase,
             "hba": ws["M3"].value, "hbd": ws["N3"].value,
-            "codes": _codes(system, [f"{ph}{i}" for i in range(1, len(rows) + 1)], have),
+            "codes": _codes(system, reps, have),
+            "dropped": ", ".join(f"{system}-{reps[rows.index(r)]}" for r in dropped),
             "n_expected": len(rows),
             "n_with_areas": sum(have),
             "n_vials_used": c[10] if c else 0,
@@ -146,7 +159,7 @@ def _ternary(ws, block: str) -> list[dict]:
             "water_src": c[12] if c else "",
             "aq_terpene_max": f"{terp:.5f}" if terp is not None else "",
             "aq_organics_ratio": f"{ratio:.2f}" if ratio is not None else "",
-            "aq_suspect": suspect,
+            "aq_reasons": aq_reasons,
         }  # fmt: skip
         out.append(_verdict(row, c[11] if c else ""))
     return out
@@ -172,6 +185,7 @@ def _binary(ws, block: str) -> list[dict]:
             "phase": "" if water is None else ("aqueous" if water > 0.5 else "organic"),
             "hba": ws["M3"].value, "hbd": ws["N3"].value,
             "codes": _codes(f"BIN{binnum}", [_BIN_CODE[x] for x in reps], have),
+            "dropped": "",
             "n_expected": len(reps),
             "n_with_areas": sum(have),
             "n_vials_used": len(reps) if water is not None else 0,

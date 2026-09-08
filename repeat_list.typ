@@ -11,11 +11,10 @@
 
 #let action = (
   missing_vials: "Never injected: prepare both vials, KF + GC.",
-  single_vial: "One vial missing: prepare it, KF + GC.",
   low_closure: "Mass does not close: re-sample the phase, re-weigh, KF, GC.",
   replicate_mismatch: "Replicate injections differ > 3x: re-dilute and re-inject both vials.",
-  dropped_replicate: "One vial sampled the wrong phase: re-sample.",
-  aqueous_organics_suspect: "Organic droplets in the aqueous sample: re-sample after longer settling, from mid-layer, avoiding the interface.",
+  aqueous_organics_suspect: "Organic droplets in both aqueous vials: re-sample after longer settling, from mid-layer, avoiding the interface.",
+  aqueous_replicate_mismatch: "Aqueous vials disagree on 2PE > 3x (no droplet signature) and the organic phase gives no reference: re-sample both.",
 )
 #let why(r) = r.reason.split(";").map(k => action.at(k)).join(linebreak())
 #let gl(s) = calc.round(float(s) * 1000, digits: 2)
