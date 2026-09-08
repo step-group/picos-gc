@@ -38,16 +38,17 @@ from pathlib import Path
 import openpyxl
 
 from fill_ternarios import (
+    BIN_PAIRS,
     BIN_TO_BLOCK,
-    CLOSURE_BAND,
     MISMATCH_MAX,
     ORGANIC_WATER_MAX,
-    _binary_bydiff,
     _num,
     _terp,
     _vial_rows,
     aq_terpene_max,
     aqueous_keep,
+    binary_endpoint,
+    binary_vials,
     results_rows,
     vial_fractions,
 )
@@ -173,32 +174,36 @@ def _binary(ws, block: str) -> list[dict]:
     if ws["A25"].value != "Bin":
         return []
     g2, h2 = _num(ws, "G2"), _num(ws, "H2")
-    lo, hi = CLOSURE_BAND
+    hba, hbd = ws["M3"].value, ws["N3"].value
+    terp_max = aq_terpene_max(hba, hbd)
+    binnum = next((b for b, blk in BIN_TO_BLOCK.items() if blk == block), None)
+    prefix = f"BIN{binnum}" if binnum else f"{block}-bin"
     out = []
-    for row, reps in ((25, (25, 26)), (27, (27, 28))):
-        water, src = _num(ws, f"AG{row}"), "kf"
-        if water is None:
-            bd = _binary_bydiff(ws, reps, g2, h2)
-            water, src = (bd[2], "bydiff") if bd else (None, "")
-        closure = _num(ws, f"AA{row}")
-        flags = "low_closure" if closure is not None and not (lo <= closure <= hi) else ""
+    for _row, reps in BIN_PAIRS:
+        vials = binary_vials(ws, reps, g2, h2)
+        point, closure, src, flags, kept = binary_endpoint(vials, terp_max)
+        all_kf = [c for v in vials for c in v["kf"]]
+        terp, ratio, aq_reasons = _aqueous_organics(kept, all_kf, terp_max)
         have = [_num(ws, f"M{x}") is not None or _num(ws, f"N{x}") is not None for x in reps]
-        binnum = next(b for b, blk in BIN_TO_BLOCK.items() if blk == block)
+        dropped = [v["raw"]["row"] for v in vials if v not in kept]
         r = {
             "kind": "binary", "block": block, "system": f"{block}-bin",
-            "phase": "" if water is None else ("aqueous" if water > 0.5 else "organic"),
-            "hba": ws["M3"].value, "hbd": ws["N3"].value,
-            "codes": _codes(f"BIN{binnum}", [_BIN_CODE[x] for x in reps], have),
-            "dropped": "",
+            "phase": "" if point is None else ("aqueous" if point[2] > 0.5 else "organic"),
+            "hba": hba, "hbd": hbd,
+            "codes": _codes(prefix, [_BIN_CODE[x] for x in reps], have),
+            "dropped": ", ".join(f"{prefix}-{_BIN_CODE[x]}" for x in dropped),
             "n_expected": len(reps),
             "n_with_areas": sum(have),
-            "n_vials_used": len(reps) if water is not None else 0,
+            "n_vials_used": len(kept),
             "n_kf": _n_kf(ws, reps),
             "closure": f"{closure:.5f}" if closure is not None else "",
             "water_src": src,
-            "aq_terpene_max": "", "aq_ceiling": "", "aq_organics_ratio": "",  # no 2PE here
+            "aq_terpene_max": f"{terp:.5f}" if terp is not None else "",
+            "aq_ceiling": f"{terp_max:.5f}" if terp is not None else "",
+            "aq_organics_ratio": f"{ratio:.2f}" if ratio is not None else "",
+            "aq_reasons": aq_reasons,
         }  # fmt: skip
-        out.append(_verdict(r, flags))
+        out.append(_verdict(r, ";".join(flags)))
     return out
 
 

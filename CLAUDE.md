@@ -48,12 +48,13 @@ all 8 map); masses `D/F/H` and KF water `U/V` stay hand-entered. Carvone reads a
 in `samples.csv` (binary-method RT miscalibrated), so blocks A & F route their Carvone area
 through `fill_binary`'s single-remaining-terpene fallback (right value, wrong label). The
 block sits below the pipeline's hardcoded rows 5–24, so the ternary CSV/`results_rows` never
-sees it. After recalc, `fill_ternarios.binary_tieline_rows` emits the endpoints (rows 25
-organic / 27 aqueous) to `out/binarios_tielines.csv` with a `water_src` column: the **organic**
-endpoint uses the KF-anchored formula (`kf`); the **aqueous** endpoint uses it when its KF is
-present, else falls back to water **by difference** (`bydiff`, water = 1−HBA−HBD from
-areas+masses) — so aqueous KF is optional (matches "KF is unreliable at high water"). A block
-needs masses + at least the organic KF. `plot_experimental_tielines.py` draws the endpoints as
+sees it. `fill_ternarios.binary_tieline_rows` emits the endpoints to `out/binarios_tielines.csv`
+computed **from the raw cells** (masses D/F/H, areas M/N, KF U/V) through the same chain as
+the ternaries (`binary_vials` → `aqueous_keep` cherry-pick → `binary_endpoint`): the
+**organic** endpoint (water < 0.5) is KF-anchored (`water_src=kf`), the **aqueous** one takes
+water **by difference** (`bydiff`), so aqueous KF is optional. Never read the sheet's cached
+binary formula cells (AA/AE–AG rows 25–28): they go stale between recalcs — Bloque H's cached
+AA25 read 0.35 while its raw cells close at 0.94. A block needs masses + the organic KF. `plot_experimental_tielines.py` draws the endpoints as
 a green tie-line on the 2PE-free edge in all three views (`_experimental`, `_experimental_zoom`,
 `_aqueous_log`). All 8 blocks resolve both endpoints (every aqueous one `bydiff`: no
 aqueous KF was measured).

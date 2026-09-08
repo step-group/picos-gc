@@ -31,6 +31,15 @@ def _sheet():
     for r in (16, 17, 18):  # 2PE 1 %, terpenes 0.5 % each -> droplets
         ws[f"L{r}"], ws[f"M{r}"], ws[f"N{r}"] = 50.0, 25.0, 25.0
     ws["L20"], ws["M20"], ws["N20"] = 10.0, 1.25, 1.25  # 2PE 0.2 %, clean terpenes
+    # Binary edge rows 25-28 (add_binary_tielines layout): T1/T2 organic with KF 3 %,
+    # B1 clean aqueous (0.1 g/L per terpene, no KF), B2 with 10 g/L per terpene (droplets).
+    ws["A25"] = "Bin"
+    for r in (25, 26, 27, 28):
+        ws[f"D{r}"], ws[f"F{r}"], ws[f"H{r}"] = 10.0, 11.0, 12.0
+    for r in (25, 26):
+        ws[f"M{r}"], ws[f"N{r}"], ws[f"U{r}"] = 2350.0, 2350.0, 3.0  # 47 % + 47 % + 3 %
+    ws["M27"], ws["N27"] = 0.5, 0.5
+    ws["M28"], ws["N28"] = 50.0, 50.0
     return wb
 
 
@@ -62,4 +71,10 @@ def test_verdicts():
     # 2PE-only disagreement (5x), no droplet signature
     assert by[("Z4", "Inferior")]["reason"] == "aqueous_replicate_mismatch"
     assert by[("Z4", "Inferior")]["aq_organics_ratio"] == "4.20"
-    assert len(by) == 8  # no binary block on a synthetic sheet
+    # binary edge: organic endpoint closes (0.47+0.47+0.03), aqueous cherry-picks B1
+    org, aq = by[("Z-bin", "organic")], by[("Z-bin", "aqueous")]
+    assert org["repeat"] == "no" and org["closure"] == "0.97000" and org["water_src"] == "kf"
+    assert org["codes"] == "Z-bin-T1, Z-bin-T2"  # block not in BIN_TO_BLOCK: no BIN number
+    assert aq["repeat"] == "no" and aq["dropped"] == "Z-bin-B2" and aq["n_vials_used"] == 1
+    assert aq["water_src"] == "bydiff" and aq["aq_terpene_max"] == "0.00020"
+    assert len(by) == 10
