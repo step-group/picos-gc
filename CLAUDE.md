@@ -79,3 +79,13 @@ workbook changed. Printable lab worksheet (checkboxes, sample codes, per-reason 
 `typst compile repeat_list.typ out/repeat_list.pdf` — it reads the CSV, no Python. Test without the project venv (it cannot sync while `pcsaft-quaternary`
 is an empty gitlink): `uv run --no-project --with openpyxl --with pytest pytest --noconftest
 -o pythonpath=. tests/test_audit_repeats.py tests/test_fill_ternarios.py`.
+
+Lab prep book for the repeat campaign: `uv run make_repeat_workbook.py [EXTRA_TUBE ...]`
+(e.g. `D2`) trims `aromas_equilibrios_vfinal.xlsx` (the campaign's prep workbook: feed
+`z` per tie-line, `Lab_DES` tube-weighing sheet, `Sheet2` GC-vial sheet) to the tubes with
+a `repeat=yes` point in `out/repeat_list.csv` (binaries as `BIN<n>` via `BIN_TO_BLOCK`)
+and writes `out/aromas_equilibrios_repeat.xlsx`. Other tubes are **hidden, not deleted**
+(the volume estimates are cross-sheet formulas openpyxl would not rewrite; unhide to get
+the full book back). Every kept ternary tube gets its four GC vials appended to `Sheet2`
+as `C4-T1` … `C4-B2` (hyphen, like the `BIN1-T1` rows; `CODE_RE` accepts it). Test:
+`tests/test_make_repeat_workbook.py` (same no-project invocation).
