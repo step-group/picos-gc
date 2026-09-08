@@ -3,7 +3,7 @@ import pytest
 pytest.importorskip("openpyxl")
 import openpyxl
 
-from audit_repeats import _2pe_outliers, audit
+from audit_repeats import _2pe_outliers, _edge_vs_ternary, audit
 
 
 def _sheet():
@@ -109,3 +109,38 @@ def test_the_odd_2pe_rich_endpoint_is_flagged():
     assert by[("F2", "bydiff")]["repeat"] == "yes"
     assert all(by[(s, "bydiff")]["repeat"] == "no" for s in ("A2", "B1", "C1", "E2", "A1"))
     assert by[("F2", "kf")]["repeat"] == "no"  # the organic phase is not the suspect
+
+
+def _block(block: str, edge_terp: str, lean_terp: str) -> list[dict]:
+    """One block: its binary aqueous edge, its solvent-richest tie-line (2 % 2PE) and a
+    decoy 2PE-rich one that the rule must not pick."""
+    base = {"block": block, "reason": "", "repeat": "no", "hba": "thymol", "hbd": "carvacrol"}
+    return [
+        {**base, "kind": "binary", "system": f"{block}-bin", "phase": "aqueous",
+         "water_src": "bydiff", "w_2pe": "", "terp": edge_terp},
+        {**base, "kind": "ternary", "system": f"{block}2", "phase": "Superior",
+         "water_src": "kf", "w_2pe": "0.03800", "terp": "0.94000"},
+        {**base, "kind": "ternary", "system": f"{block}2", "phase": "Inferior",
+         "water_src": "bydiff", "w_2pe": "0.00030", "terp": lean_terp},
+        {**base, "kind": "ternary", "system": f"{block}1", "phase": "Superior",
+         "water_src": "kf", "w_2pe": "0.87800", "terp": "0.02000"},
+        {**base, "kind": "ternary", "system": f"{block}1", "phase": "Inferior",
+         "water_src": "bydiff", "w_2pe": "0.01710", "terp": "0.00002"},
+    ]  # fmt: skip
+
+
+def test_edge_and_its_solvent_richest_tieline_must_agree():
+    rows = (
+        _block("C", "0.00267", "0.00085")  # edge 3.1x the tie-line: blame the edge
+        + _block("H", "0.00064", "0.00244")  # tie-line 3.8x the edge: blame the tie-line
+        + _block("E", "0.00080", "0.00055")  # 1.5x: agrees, nobody flagged
+    )
+    _edge_vs_ternary(rows)
+    by = {(r["block"], r["system"], r["water_src"]): r for r in rows}
+    assert by[("C", "C-bin", "bydiff")]["reason"] == "edge_ternary_mismatch"
+    assert by[("C", "C2", "bydiff")]["repeat"] == "no"
+    assert by[("H", "H2", "bydiff")]["reason"] == "edge_ternary_mismatch"
+    assert by[("H", "H-bin", "bydiff")]["repeat"] == "no"
+    assert all(r["repeat"] == "no" for r in rows if r["block"] == "E")
+    # the 2PE-rich tie-line is never the one compared, however far off it sits
+    assert all(by[(b, f"{b}1", "bydiff")]["repeat"] == "no" for b in "CHE")

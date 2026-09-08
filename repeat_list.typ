@@ -16,6 +16,7 @@
   aqueous_organics_suspect: "Organic droplets in both aqueous vials: re-sample after longer settling, from mid-layer, avoiding the interface.",
   aqueous_replicate_mismatch: "Aqueous vials disagree on 2PE > 3x (no droplet signature) and the organic phase gives no reference: re-sample both.",
   aqueous_2pe_outlier: "Aqueous 2PE misses the other 2PE-rich tie-lines by > 1.5x, though they share the same organic phase (≈88 % 2PE): re-sample the aqueous phase, re-weigh, re-inject.",
+  edge_ternary_mismatch: "Carries > 3x the terpene of the block's other near-solvent-free point (the binary edge and the ≈2 % 2PE tie-line are the same system): this is the richer of the two, so re-sample it after longer settling, from mid-layer.",
 )
 #let why(r) = r.reason.split(";").map(k => action.at(k)).join(linebreak())
 #let gl(s) = calc.round(float(s) * 1000, digits: 2)
@@ -43,6 +44,7 @@
           if r.aq_terpene_max != "" { d.push([terpenes #gl(r.aq_terpene_max) g/L (max #gl(r.aq_ceiling))]) }
           if r.aq_organics_ratio != "" { d.push([vial ratio #r.aq_organics_ratio]) }
           if r.reason.contains("2pe_outlier") { d.push([2PE #gl(r.w_2pe) g/L (others 16–20)]) }
+          if r.reason.contains("edge_ternary") { d.push([terpenes #gl(r.terp) g/L here]) }
           d.join(linebreak())
         },
         why(r),

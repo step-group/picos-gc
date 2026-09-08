@@ -11,8 +11,8 @@ the pipeline's. Binary edge rows 25-28 get the same treatment (fill_ternarios'
 binary export carries no closure at all).
 
 Repeat reasons: missing_vials, low_closure, replicate_mismatch,
-aqueous_organics_suspect, aqueous_replicate_mismatch, aqueous_2pe_outlier.
-Informational only (in
+aqueous_organics_suspect, aqueous_replicate_mismatch, aqueous_2pe_outlier,
+edge_ternary_mismatch. Informational only (in
 `flags`, never a repeat): single_vial (one clean vial is accepted), dropped_replicate
 (the pipeline already cherry-picked the clean vial, see fill_ternarios.aqueous_keep),
 a single KF titration (n_kf).
@@ -28,6 +28,7 @@ here — the only reference would be the same tie-line's organic phase via the 2
 distribution coefficient (40-50 in every clean system), and the one current case
 (D1) has a broken organic phase; add that pick when a case with a sound one appears.
 aqueous_2pe_outlier = see _2pe_outliers.
+edge_ternary_mismatch = see _edge_vs_ternary.
 
 Run: uv run audit_repeats.py   ->  out/repeat_list.csv + console table
 """
@@ -64,9 +65,11 @@ REPEAT_FLAGS = ("low_closure", "replicate_mismatch")
 # % terpene in it, whatever the block: one number, measured once per block.
 ORG_2PE_BINARY_LIKE = 0.80
 AQ_2PE_OUTLIER = 1.5
+# Edge vs solvent-richest tie-line. B is the closest passer at 2.2x, A/C/H trip at 20/3.1/3.8.
+EDGE_TERNARY_MAX = 3.0
 COLS = [
     "kind", "block", "system", "phase", "hba", "hbd", "codes", "dropped", "n_expected",
-    "n_with_areas", "n_vials_used", "n_kf", "closure", "water_src", "w_2pe",
+    "n_with_areas", "n_vials_used", "n_kf", "closure", "water_src", "w_2pe", "terp",
     "aq_terpene_max", "aq_ceiling", "aq_organics_ratio", "flags", "repeat", "reason",
 ]  # fmt: skip
 _BIN_CODE = {25: "T1", 26: "T2", 27: "B1", 28: "B2"}  # fill_ternarios._BIN_ROWS inverted
@@ -104,6 +107,44 @@ def _aqueous_organics(
     return max(terp), ratio, reasons
 
 
+def _add_reason(row: dict, reason: str) -> None:
+    row["reason"] = ";".join(filter(None, (row["reason"], reason)))
+    row["repeat"] = "yes"
+
+
+def _edge_vs_ternary(rows: list[dict]) -> None:
+    """A block's water-solvent edge and its solvent-richest tie-line are the same system:
+    both sit against an organic phase that is ~96 % solvent, the edge by construction and
+    the tie-line because it was fed only ~2 % 2PE. Their aqueous terpene must agree.
+    Where the two differ by more than EDGE_TERNARY_MAX x, blame the higher one: droplets
+    can only ADD terpene, and on this data the lower member always lands inside the
+    0.4-1.1 band an ideal saturated 1:1 mixture allows. ponytail: no tie-break for the
+    case where both sit above that band — the higher is still the better guess.
+    """
+    for block in sorted({r["block"] for r in rows}):
+        blk = [r for r in rows if r["block"] == block]
+        edge = next(
+            (r for r in blk if r["kind"] == "binary" and r["phase"] == "aqueous" and r["terp"]),
+            None,
+        )
+        org = [r for r in blk if r["kind"] == "ternary" and r["water_src"] == "kf" and r["w_2pe"]]
+        if edge is None or not org:
+            continue
+        lean = min(org, key=lambda r: float(r["w_2pe"]))["system"]
+        tern = next(
+            (r for r in blk if r["system"] == lean and r["water_src"] == "bydiff" and r["terp"]),
+            None,
+        )
+        if tern is None or not float(tern["terp"]):
+            continue
+        if (
+            not 1 / EDGE_TERNARY_MAX
+            <= float(edge["terp"]) / float(tern["terp"])
+            <= EDGE_TERNARY_MAX
+        ):
+            _add_reason(max(edge, tern, key=lambda r: float(r["terp"])), "edge_ternary_mismatch")
+
+
 def _2pe_outliers(rows: list[dict]) -> None:
     """The 2PE-rich endpoint of every block is the same physical system: water + 2PE
     carrying a few % terpene (organic phase 87-89 % 2PE and ~8 % water in all eight of
@@ -127,8 +168,7 @@ def _2pe_outliers(rows: list[dict]) -> None:
     med = statistics.median(float(r["w_2pe"]) for r in fam)
     for r in fam:
         if not 1 / AQ_2PE_OUTLIER <= float(r["w_2pe"]) / med <= AQ_2PE_OUTLIER:
-            r["reason"] = ";".join(filter(None, (r["reason"], "aqueous_2pe_outlier")))
-            r["repeat"] = "yes"
+            _add_reason(r, "aqueous_2pe_outlier")
 
 
 def _verdict(row: dict, flags: str) -> dict:
@@ -196,6 +236,7 @@ def _ternary(ws, block: str) -> list[dict]:
             "closure": c[9] if c else "",
             "water_src": c[12] if c else "",
             "w_2pe": c[3] if c else "",
+            "terp": f"{float(c[5]) + float(c[7]):.5f}" if c and c[5] and c[7] else "",
             "aq_terpene_max": f"{terp:.5f}" if terp is not None else "",
             "aq_ceiling": f"{terp_max:.5f}" if terp is not None else "",
             "aq_organics_ratio": f"{ratio:.2f}" if ratio is not None else "",
@@ -234,6 +275,7 @@ def _binary(ws, block: str) -> list[dict]:
             "closure": f"{closure:.5f}" if closure is not None else "",
             "water_src": src,
             "w_2pe": "",  # the water-solvent edge carries no 2PE by construction
+            "terp": f"{point[0] + point[1]:.5f}" if point else "",
             "aq_terpene_max": f"{terp:.5f}" if terp is not None else "",
             "aq_ceiling": f"{terp_max:.5f}" if terp is not None else "",
             "aq_organics_ratio": f"{ratio:.2f}" if ratio is not None else "",
@@ -250,6 +292,7 @@ def audit(wb) -> list[dict]:
         ws, block = wb[sheet], sheet.split()[-1]
         rows += _ternary(ws, block) + _binary(ws, block)
     _2pe_outliers(rows)  # cross-block: needs every sheet's rows in hand
+    _edge_vs_ternary(rows)  # cross-kind: pairs each binary edge with its own ternaries
     return rows
 
 

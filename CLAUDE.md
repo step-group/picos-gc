@@ -74,7 +74,11 @@ phase 87–89 % 2PE, ~8 % water in all eight — so their aqueous phases are one
 measured once per block, 16–20 g/L in the five sound ones; `_2pe_outliers` flags a miss
 of the median by > `AQ_2PE_OUTLIER`. It is a cross-block pass, the only rule that needs
 every sheet at once, and it cannot be an absolute literature bound: published 2PE
-solubility at 30 °C spans 21–33 g/L, wider than the disagreement).
+solubility at 30 °C spans 21–33 g/L, wider than the disagreement) and
+`edge_ternary_mismatch` (a block's water–solvent edge and its solvent-richest tie-line —
+the one fed ~2 % 2PE — sit against the same ~96 % solvent organic phase, so their aqueous
+terpene must agree; `_edge_vs_ternary` flags a factor over `EDGE_TERNARY_MAX` and blames
+the **richer** of the two, since droplets only add terpene. Catches A-bin, C-bin, H1).
 Informational, never a repeat: `single_vial` (one clean vial is accepted) and
 `dropped_replicate` — `fill_ternarios.aqueous_keep` already cherry-picks: it drops a vial
 that sampled the wrong phase (E2) or an aqueous vial with droplets whose pair is clean (D2,
