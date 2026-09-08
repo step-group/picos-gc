@@ -55,4 +55,17 @@ present, else falls back to water **by difference** (`bydiff`, water = 1−HBA�
 areas+masses) — so aqueous KF is optional (matches "KF is unreliable at high water"). A block
 needs masses + at least the organic KF. `plot_experimental_tielines.py` draws the endpoints as
 a green tie-line on the 2PE-free edge in all three views (`_experimental`, `_experimental_zoom`,
-`_aqueous_log`). Today **A & B** compute; C–I need masses.
+`_aqueous_log`). All 8 blocks resolve both endpoints (every aqueous one `bydiff`: no
+aqueous KF was measured).
+
+## Repeat audit
+`uv run audit_repeats.py` reads `Sistemas ternarios_MF_filled.xlsx` only (no `out/` needed)
+and writes `out/repeat_list.csv`: one row per (system, phase) point, ternary **and** binary,
+with a `repeat` verdict. Reasons: `missing_vials`, `single_vial` (blank L/M/N = never
+injected), `low_closure`, `replicate_mismatch`, `dropped_replicate` (the last three via
+`fill_ternarios.results_rows`, so they match the pipeline). Points with no vials (C4, C5)
+appear here but are **absent** from `ternarios_resultados.csv`. A single KF titration is
+reported as `n_kf`, not a repeat reason. Re-run `fill_ternarios.py` first if the master
+workbook changed. Test without the project venv (it cannot sync while `pcsaft-quaternary`
+is an empty gitlink): `uv run --no-project --with openpyxl --with pytest pytest --noconftest
+-o pythonpath=. tests/test_audit_repeats.py tests/test_fill_ternarios.py`.

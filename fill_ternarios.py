@@ -47,7 +47,7 @@ BINARIOS_CSV = _ROOT / "out" / "BINARIOS_TERPENOS" / "samples.csv"
 # "Geraniol" in samples.csv (the binary-method RT is miscalibrated), so blocks A & F route
 # their Carvone area through fill_binary's single-remaining-terpene fallback (right value,
 # wrong label). All 8 blocks map; a block only resolves an endpoint once its masses + KF
-# are hand-entered on rows 25-28, so today only block A computes.
+# are hand-entered on rows 25-28 (all 8 blocks have masses + organic KF today).
 BIN_TO_BLOCK = {1: "A", 2: "B", 3: "C", 4: "D", 5: "E", 6: "F", 7: "H", 8: "I"}
 
 TERPS = ("camph", "carvone", "carvacrol", "geraniol", "thymol", "eugenol")
