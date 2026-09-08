@@ -46,7 +46,8 @@ _BLOCK_TITLE = re.compile(r"^([A-Z]) — ")  # "C — ThyCarvac  (Thymol + Carva
 SAMPLE_UL, IPA_UL = 300, 700  # ternary vials, like the binaries (template said 200 + 800, DF=5)
 # DES prep table (10 g, 1:1 molar): rows 17-25 of datos_des, DES name in B. Sheet1 is
 # the 5 g variant: hidden in the output, every batch is made at 10 g to have spare.
-DES_TABLES = (("datos_des", range(17, 26), "B"),)
+DES_ROWS = range(17, 26)
+DES_BIN_ROW = 29  # below the table's legend (row 27): one duplicated row per binary
 DES_CLUTTER_ROWS = range(1, 14)  # datos_des' LLE/VLE status matrix above the prep table
 DES_EXP_COLS = "GL"  # m_HBA exp / m_HBD exp of the first campaign: cleared, to be weighed anew
 HIDE_SHEETS = ("Sheet1", "Sheet2")  # Sheet2 (binary GC vials) is superseded by Sampling
@@ -84,6 +85,41 @@ def _copy_row(ws, src: int, dst: int, ncols: int = 12) -> None:
         ws.cell(dst, c).value = ws.cell(src, c).value
         ws.cell(dst, c)._style = copy(ws.cell(src, c)._style)
     ws.row_dimensions[dst].height = ws.row_dimensions[src].height
+
+
+def _repoint(formula: str, src: int, dst: int) -> str:
+    """Move a formula's same-row references down to `dst`. Anything $-anchored stays put,
+    which is exactly the absolutes this table uses ($C$15, Componentes!$AA$3:$AC$17)."""
+    return re.sub(rf"(?<=[A-Z]){src}\b", str(dst), formula)
+
+
+def _des_table(ws, des_t: set[str], des_b: list[tuple[str, str]]) -> None:
+    """Crop the 10 g prep table to the DES the ternary tubes use, clear the first
+    campaign's weighings, and duplicate a row for every binary: a binary tube is its own
+    Falcon of solvent, prepared and weighed apart from the ternary series even where the
+    pair is the same (C4/C5 and BIN3 both want ThyCarvac)."""
+    at = {ws[f"B{r}"].value: r for r in DES_ROWS}
+    if missing := (des_t | {d for _, d in des_b}) - set(at):
+        raise ValueError(f"datos_des: no prep row for {sorted(missing)}")
+    _hide(ws, DES_ROWS, {at[d] for d in des_t})
+    _hide(ws, DES_CLUTTER_ROWS, set())
+    for r in DES_ROWS:
+        for c in DES_EXP_COLS:
+            ws[f"{c}{r}"].value = None
+    if not des_b:
+        return
+    ws.column_dimensions["B"].width = 18  # "ThyCarvac (BIN3)" does not fit the sheet's own
+    ws[f"B{DES_BIN_ROW}"] = "Binarios: Falcon aparte"
+    ws[f"B{DES_BIN_ROW}"].font = copy(ws["B16"].font)
+    for row, (code, des) in enumerate(des_b, start=DES_BIN_ROW + 1):
+        _copy_row(ws, at[des], row, ncols=13)
+        for c in range(1, 14):
+            v = ws.cell(row, c).value
+            if isinstance(v, str) and v.startswith("="):
+                ws.cell(row, c).value = _repoint(v, at[des], row)
+        ws[f"B{row}"] = f"{des} ({code})"
+        for c in DES_EXP_COLS:
+            ws[f"{c}{row}"].value = None
 
 
 def _copy_sheet(src, wb, title: str):
@@ -170,16 +206,12 @@ def trim(wb, tubes: set[str]) -> None:
     for cell in LAB_RECORD_LABELS:
         lab[cell].value = None
 
-    des = {lab[f"B{r}"].value for r in keep_lab}  # after back-fill every kept row names it
-    for sheet, rows, cols in DES_TABLES:
-        ws = wb[sheet]
-        if missing := des - {ws[f"{c}{r}"].value for r in rows for c in cols}:
-            raise ValueError(f"{sheet}: no prep row for {sorted(missing)}")
-        _hide(ws, rows, {r for r in rows if any(ws[f"{c}{r}"].value in des for c in cols)})
-        for r in rows:
-            for c in DES_EXP_COLS:
-                ws[f"{c}{r}"].value = None
-    _hide(wb["datos_des"], DES_CLUTTER_ROWS, set())
+    # after the back-fill every kept row names its own DES, binary rows included
+    _des_table(
+        wb["datos_des"],
+        {lab[f"B{r}"].value for r in keep_lab if r < LAB_BIN_HEADER},
+        [(lab[f"A{r}"].value, lab[f"B{r}"].value) for r in sorted(keep_lab) if r > LAB_BIN_HEADER],
+    )
     for sheet in HIDE_SHEETS:
         wb[sheet].sheet_state = "hidden"
 
@@ -196,8 +228,9 @@ def trim(wb, tubes: set[str]) -> None:
 
 
 def des_need(tubes: set[str]) -> dict[str, float]:
-    """Grams of each DES the kept tubes consume, from Lab_DES' cached estimates
-    (ternary rows: V_DES est [I] x rho_DES est [F]; binary rows: 4 mL x that DES' rho)."""
+    """Grams per Falcon the kept tubes consume, from Lab_DES' cached estimates (ternary
+    rows: V_DES est [I] x rho_DES est [F]; binary rows: 4 mL x that DES' rho). Each binary
+    is keyed apart, `<DES> (BINn)`, because it gets its own Falcon."""
     lab = openpyxl.load_workbook(SRC, data_only=True)["Lab_DES"]
     rows = {r: lab[f"A{r}"].value for r in LAB_ROWS}
     des_of, rho = {}, {}
@@ -212,7 +245,8 @@ def des_need(tubes: set[str]) -> dict[str, float]:
     for r, code in rows.items():
         if code in tubes:
             ml = lab[f"I{r}"].value if r < LAB_BIN_HEADER else BIN_V_DES_ML
-            need[des_of[r]] = need.get(des_of[r], 0) + ml * rho.get(des_of[r], 1.0)
+            key = des_of[r] if r < LAB_BIN_HEADER else f"{des_of[r]} ({code})"
+            need[key] = need.get(key, 0) + ml * rho.get(des_of[r], 1.0)
     return need
 
 

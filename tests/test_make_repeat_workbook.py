@@ -21,15 +21,22 @@ def test_trim_hides_everything_but_the_repeat_tubes():
     assert not feed.row_dimensions[21].hidden  # C4's feed row (Lab_DES!G25 -> I21)
     assert all(feed.row_dimensions[r].hidden for r in (6, 20, 22))
     assert feed["B21"].value == "ThyCarvac"
-    # 10 g DES prep table: only the three DES in use remain; the 5 g sheet is hidden
+    # 10 g DES prep table: only the DES the TERNARY tubes use stay in the table itself,
+    # and BIN1's ThyCar is not one of them -- it gets its own Falcon row below.
     dd = wb["datos_des"]
     assert [dd[f"B{r}"].value for r in range(17, 26) if not dd.row_dimensions[r].hidden] == [
-        "ThyCar",
         "ThyCarvac",
         "CamEug",
     ]
     assert (dd["G17"].value, dd["L17"].value) == (None, None)  # last campaign's weighings gone
     assert str(dd["M17"].value).startswith("=IF(")  # the ratio formula stays
+    assert dd["B29"].value == "Binarios: Falcon aparte"
+    assert dd["B30"].value == "ThyCar (BIN1)"  # duplicated from row 17, formulas re-pointed
+    assert (dd["C30"].value, dd["H30"].value) == ("thymol", "carvone")
+    assert dd["D30"].value == "=VLOOKUP(C30,Componentes!$AA$3:$AC$17,2,FALSE())"
+    assert dd["F30"].value == "=$C$15*D30/(D30+I30)/E30"  # $-anchored refs untouched
+    assert (dd["G30"].value, dd["L30"].value) == (None, None)
+    assert dd["B31"].value is None  # one binary in, one row out
     assert dd.row_dimensions[2].hidden and not dd.row_dimensions[14].hidden  # status matrix gone
     assert wb["Sheet1"].sheet_state == "hidden"
     assert wb["Sheet2"].sheet_state == "hidden"  # superseded by Sampling

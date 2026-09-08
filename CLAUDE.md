@@ -103,8 +103,12 @@ cell by cell) keep the four vials of every kept tube plus their block's three he
 rows; block I (CamEug) is not in that template and is cloned from the last ternary block
 after the binaries, titled from `Lab_DES`. Vial codes stay `C4-T1` (hyphen; `CODE_RE`
 accepts it). `Sheet2` (the prep book's own binary vial sheet) is hidden as redundant. The 10 g
-DES prep table (`datos_des`) is cropped to the DES those tubes use, its experimental
-masses (G/L) cleared for the new weighings; the 5 g variant
+DES prep table (`datos_des`) is cropped to the DES the **ternary** tubes use, its
+experimental masses (G/L) cleared for the new weighings, and every binary gets a
+duplicated row below the legend (`_des_table`, labelled `<DES> (BINn)`, formulas
+re-pointed by `_repoint`): a binary is its own Falcon of solvent, weighed apart even when
+the pair repeats a ternary one. The console prints grams per Falcon, keyed the same way.
+The 5 g variant
 (`Sheet1`) is hidden — every batch is made at 10 g to have spare. The console still
 prints the grams of each DES the tubes consume (cached `Lab_DES` estimates; binaries as
 4 mL) as a check against that 10 g. Test:
