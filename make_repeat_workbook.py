@@ -46,6 +46,7 @@ _BLOCK_TITLE = re.compile(r"^([A-Z]) — ")  # "C — ThyCarvac  (Thymol + Carva
 # DES prep table (10 g, 1:1 molar): rows 17-25 of datos_des, DES name in B. Sheet1 is
 # the 5 g variant: hidden in the output, every batch is made at 10 g to have spare.
 DES_TABLES = (("datos_des", range(17, 26), "B"),)
+DES_EXP_COLS = "GL"  # m_HBA exp / m_HBD exp of the first campaign: cleared, to be weighed anew
 HIDE_SHEETS = ("Sheet1", "Sheet2")  # Sheet2 (binary GC vials) is superseded by Sampling
 BIN_V_DES_ML = 4  # Lab_DES F59:F66 (binary rows carry V_DES in F, no density)
 
@@ -110,16 +111,20 @@ def _sampling(wb, tubes: set[str], lab, keep_lab: set[int]) -> None:
     after the binaries, titled from Lab_DES, with the row formulas re-pointed."""
     ws = _copy_sheet(openpyxl.load_workbook(SAMPLING_SRC)["Sampling"], wb, "Sampling")
     last = ws.max_row
-    keep, header, found, tpl = set(), set(), set(), None
+    keep, header, found, tpl, bin_row = set(), set(), set(), None, None
     for r in range(1, last + 1):
         a = ws[f"A{r}"].value
         if isinstance(a, str) and (_BLOCK_TITLE.match(a) or a.startswith("BINARIOS")):
             header = {r, r + 1, r + 2}
             tpl = r if _BLOCK_TITLE.match(a) else tpl
+            bin_row = r if a.startswith("BINARIOS") else bin_row
         elif a in tubes:
             keep |= header | set(range(r, r + 4))
             found.add(a)
     _hide(ws, range(1, last + 1), keep)
+    if bin_row:  # the template's binaries rows are ~5x taller: match the ternary block
+        for r in range(bin_row, last + 1):
+            ws.row_dimensions[r].height = ws.row_dimensions[min(r - bin_row + 1, 4)].height
     missing = sorted(tubes - found)
     if bins := [t for t in missing if t.startswith("BIN")]:
         raise ValueError(f"Sampling: no rows for {bins}")
@@ -164,6 +169,9 @@ def trim(wb, tubes: set[str]) -> None:
         if missing := des - {ws[f"{c}{r}"].value for r in rows for c in cols}:
             raise ValueError(f"{sheet}: no prep row for {sorted(missing)}")
         _hide(ws, rows, {r for r in rows if any(ws[f"{c}{r}"].value in des for c in cols)})
+        for r in rows:
+            for c in DES_EXP_COLS:
+                ws[f"{c}{r}"].value = None
     for sheet in HIDE_SHEETS:
         wb[sheet].sheet_state = "hidden"
 

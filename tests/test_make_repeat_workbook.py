@@ -28,6 +28,8 @@ def test_trim_hides_everything_but_the_repeat_tubes():
         "ThyCarvac",
         "CamEug",
     ]
+    assert (dd["G17"].value, dd["L17"].value) == (None, None)  # last campaign's weighings gone
+    assert str(dd["M17"].value).startswith("=IF(")  # the ratio formula stays
     assert wb["Sheet1"].sheet_state == "hidden"
     assert wb["Sheet2"].sheet_state == "hidden"  # superseded by Sampling
     # Sampling (from PLANTILLA_IMPRESION.xlsx): block C header + C4 vials, binaries header + BIN1
@@ -35,6 +37,8 @@ def test_trim_hides_everything_but_the_repeat_tubes():
     visible = [r for r in range(1, 220) if not sp.row_dimensions[r].hidden]
     assert visible == [47, 48, 49, 62, 63, 64, 65, 185, 186, 187, 188, 189, 190, 191]
     assert (sp["D62"].value, sp["D188"].value) == ("C4-T1", "BIN1-T1")
+    heights = sp.row_dimensions  # binaries rows re-heighted like the ternary block
+    assert (heights[187].height, heights[188].height) == (heights[3].height, heights[4].height)
     assert sp["H62"].value == '=IF(OR(E62="",F62=""),"",F62-E62)'  # formulas survived the copy
     assert sp["A47"].font.b and sp["E62"].fill.fgColor.rgb == "FFFCE4D6"  # and so did styles
     # block I is not in the template: cloned after the binaries, titled from Lab_DES
