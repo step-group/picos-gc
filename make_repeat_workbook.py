@@ -46,6 +46,7 @@ _BLOCK_TITLE = re.compile(r"^([A-Z]) — ")  # "C — ThyCarvac  (Thymol + Carva
 # DES prep table (10 g, 1:1 molar): rows 17-25 of datos_des, DES name in B. Sheet1 is
 # the 5 g variant: hidden in the output, every batch is made at 10 g to have spare.
 DES_TABLES = (("datos_des", range(17, 26), "B"),)
+DES_CLUTTER_ROWS = range(1, 14)  # datos_des' LLE/VLE status matrix above the prep table
 DES_EXP_COLS = "GL"  # m_HBA exp / m_HBD exp of the first campaign: cleared, to be weighed anew
 HIDE_SHEETS = ("Sheet1", "Sheet2")  # Sheet2 (binary GC vials) is superseded by Sampling
 BIN_V_DES_ML = 4  # Lab_DES F59:F66 (binary rows carry V_DES in F, no density)
@@ -172,6 +173,7 @@ def trim(wb, tubes: set[str]) -> None:
         for r in rows:
             for c in DES_EXP_COLS:
                 ws[f"{c}{r}"].value = None
+    _hide(wb["datos_des"], DES_CLUTTER_ROWS, set())
     for sheet in HIDE_SHEETS:
         wb[sheet].sheet_state = "hidden"
 

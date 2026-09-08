@@ -30,6 +30,7 @@ def test_trim_hides_everything_but_the_repeat_tubes():
     ]
     assert (dd["G17"].value, dd["L17"].value) == (None, None)  # last campaign's weighings gone
     assert str(dd["M17"].value).startswith("=IF(")  # the ratio formula stays
+    assert dd.row_dimensions[2].hidden and not dd.row_dimensions[14].hidden  # status matrix gone
     assert wb["Sheet1"].sheet_state == "hidden"
     assert wb["Sheet2"].sheet_state == "hidden"  # superseded by Sampling
     # Sampling (from PLANTILLA_IMPRESION.xlsx): block C header + C4 vials, binaries header + BIN1
