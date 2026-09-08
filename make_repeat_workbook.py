@@ -8,9 +8,10 @@ Tubes = the tie-lines with a repeat=yes point in out/repeat_list.csv (ternary sy
 binaries as BIN<n> via fill_ternarios.BIN_TO_BLOCK) plus any extra codes on argv. Rows of
 every other tube are HIDDEN, not deleted: Lab_DES' volume estimates are cross-sheet
 formulas into '2-phenylethanol_DES' and openpyxl would not rewrite them. A re-prepared
-tube is a new tie-line, so Sheet2 (GC vial weighing) gets all four vials (T1 T2 B1 B2)
-of every kept ternary tube, coded like the binaries already are (C4-T1; fill_ternarios'
-CODE_RE accepts the hyphen).
+tube is a new tie-line, so the printable vial sheets (PLANTILLA_IMPRESION.xlsx's
+"Sampling", copied in) keep all four vials (T1 T2 B1 B2) of every kept tube; a block the
+template lacks (I - CamEug) is cloned from the last ternary block. Vial codes stay in
+the template's hyphen form (C4-T1), which fill_ternarios' CODE_RE accepts.
 
 Run: uv run make_repeat_workbook.py [EXTRA_TUBE ...]   e.g.  uv run make_repeat_workbook.py D2
   -> out/aromas_equilibrios_repeat.xlsx
@@ -22,6 +23,7 @@ import csv
 import re
 import sys
 from copy import copy
+from itertools import groupby
 from pathlib import Path
 
 import openpyxl
@@ -34,11 +36,13 @@ LIST = _ROOT / "out" / "repeat_list.csv"
 OUT = _ROOT / "out" / "aromas_equilibrios_repeat.xlsx"
 _FEED_REF = re.compile(r"'2-phenylethanol_DES'!I(\d+)")
 LAB_ROWS, LAB_BIN_HEADER = range(10, 67), 58
-FEED_ROWS, GC_ROWS, GC_HEADER, GC_APPEND = range(6, 64), range(4, 43), 3, 44
+FEED_ROWS = range(6, 64)
+SAMPLING_SRC = _ROOT / "PLANTILLA_IMPRESION.xlsx"  # sheet "Sampling": printable vial sheets
+_BLOCK_TITLE = re.compile(r"^([A-Z]) — ")  # "C — ThyCarvac  (Thymol + Carvacrol)"
 # DES prep table (10 g, 1:1 molar): rows 17-25 of datos_des, DES name in B. Sheet1 is
 # the 5 g variant: hidden in the output, every batch is made at 10 g to have spare.
 DES_TABLES = (("datos_des", range(17, 26), "B"),)
-HIDE_SHEETS = ("Sheet1",)
+HIDE_SHEETS = ("Sheet1", "Sheet2")  # Sheet2 (binary GC vials) is superseded by Sampling
 BIN_V_DES_ML = 4  # Lab_DES F59:F66 (binary rows carry V_DES in F, no density)
 
 
@@ -68,11 +72,71 @@ def _hide(ws, rows, keep: set[int]) -> None:
         ws.row_dimensions[r].hidden = r not in keep
 
 
-def _copy_row(ws, src: int, dst: int) -> None:
-    for c in range(1, 10):
+def _copy_row(ws, src: int, dst: int, ncols: int = 12) -> None:
+    for c in range(1, ncols + 1):
         ws.cell(dst, c).value = ws.cell(src, c).value
         ws.cell(dst, c)._style = copy(ws.cell(src, c)._style)
     ws.row_dimensions[dst].height = ws.row_dimensions[src].height
+
+
+def _copy_sheet(src, wb, title: str):
+    """Cross-workbook copy: values + styles attribute-wise (_style ids are per workbook),
+    column widths, row heights, landscape fit-to-width. Manual page breaks are dropped:
+    they sit on rows that end up hidden."""
+    dst = wb.create_sheet(title)
+    for row in src.iter_rows():
+        for c in row:
+            d = dst.cell(c.row, c.column, c.value)
+            d.font, d.fill, d.border = copy(c.font), copy(c.fill), copy(c.border)
+            d.alignment, d.number_format = copy(c.alignment), c.number_format
+    for k, dim in src.column_dimensions.items():
+        dst.column_dimensions[k].width = dim.width
+    for r, dim in src.row_dimensions.items():
+        dst.row_dimensions[r].height = dim.height
+    dst.page_setup.orientation = src.page_setup.orientation
+    dst.page_setup.fitToWidth, dst.page_setup.fitToHeight = 1, 0
+    dst.sheet_properties.pageSetUpPr = copy(src.sheet_properties.pageSetUpPr)
+    return dst
+
+
+def _sampling(wb, tubes: set[str], lab, keep_lab: set[int]) -> None:
+    """Bring the print template's Sampling sheet in and keep only the kept tubes' four
+    vial rows plus their block's three header rows (title, method line, column header).
+    A ternary block the template lacks (I — CamEug) is cloned from the last ternary block
+    after the binaries, titled from Lab_DES, with the row formulas re-pointed."""
+    ws = _copy_sheet(openpyxl.load_workbook(SAMPLING_SRC)["Sampling"], wb, "Sampling")
+    last = ws.max_row
+    keep, header, found, tpl = set(), set(), set(), None
+    for r in range(1, last + 1):
+        a = ws[f"A{r}"].value
+        if isinstance(a, str) and (_BLOCK_TITLE.match(a) or a.startswith("BINARIOS")):
+            header = {r, r + 1, r + 2}
+            tpl = r if _BLOCK_TITLE.match(a) else tpl
+        elif a in tubes:
+            keep |= header | set(range(r, r + 4))
+            found.add(a)
+    _hide(ws, range(1, last + 1), keep)
+    missing = sorted(tubes - found)
+    if bins := [t for t in missing if t.startswith("BIN")]:
+        raise ValueError(f"Sampling: no rows for {bins}")
+    row = last + 2
+    for _letter, group in groupby(missing, key=lambda t: t[0]):
+        codes = list(group)
+        lab_row = next(r for r in keep_lab if lab[f"A{r}"].value == codes[0])
+        des, hba, hbd = (lab[f"{c}{lab_row}"].value for c in "BCD")
+        for i in range(3):
+            _copy_row(ws, tpl + i, row + i)
+        ws[f"A{row}"] = f"{codes[0][0]} — {des}  ({hba} + {hbd})"
+        row += 3
+        for tube in codes:
+            for j, tag in enumerate(("T1", "T2", "B1", "B2")):
+                src = tpl + 3 + j  # the template block's first tube: Top 1/2, Bot 1/2
+                _copy_row(ws, src, row)
+                ws[f"A{row}"] = tube if j == 0 else None
+                ws[f"D{row}"] = f"{tube}-{tag}"
+                for c in "HIJ":
+                    ws[f"{c}{row}"] = re.sub(rf"(?<=[A-L]){src}\b", str(row), ws[f"{c}{src}"].value)
+                row += 1
 
 
 def trim(wb, tubes: set[str]) -> None:
@@ -104,23 +168,7 @@ def trim(wb, tubes: set[str]) -> None:
         _backfill(feed, r)
     _hide(feed, FEED_ROWS, keep_feed)
 
-    gc = wb["Sheet2"]
-    keep_gc = set()
-    for r in GC_ROWS:
-        if gc[f"A{r}"].value in tubes:
-            keep_gc |= set(range(r, r + 4))
-    _hide(gc, GC_ROWS, keep_gc)
-    row = GC_APPEND
-    _copy_row(gc, GC_HEADER, row)
-    for tube in sorted(t for t in tubes if not t.startswith("BIN")):
-        for j, (phase, tag, rep) in enumerate(
-            (("Top", "T", 1), ("Top", "T", 2), ("Bot", "B", 1), ("Bot", "B", 2))
-        ):
-            row += 1
-            _copy_row(gc, GC_ROWS.start + j, row)  # borders/fills of the BIN1 block
-            gc[f"A{row}"] = tube if j == 0 else None
-            gc[f"B{row}"] = phase if rep == 1 else None
-            gc[f"C{row}"], gc[f"D{row}"] = rep, f"{tube}-{tag}{rep}"
+    _sampling(wb, tubes, lab, keep_lab)
 
 
 def des_need(tubes: set[str]) -> dict[str, float]:

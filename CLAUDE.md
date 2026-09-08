@@ -86,8 +86,11 @@ Lab prep book for the repeat campaign: `uv run make_repeat_workbook.py [EXTRA_TU
 a `repeat=yes` point in `out/repeat_list.csv` (binaries as `BIN<n>` via `BIN_TO_BLOCK`)
 and writes `out/aromas_equilibrios_repeat.xlsx`. Other tubes are **hidden, not deleted**
 (the volume estimates are cross-sheet formulas openpyxl would not rewrite; unhide to get
-the full book back). Every kept ternary tube gets its four GC vials appended to `Sheet2`
-as `C4-T1` … `C4-B2` (hyphen, like the `BIN1-T1` rows; `CODE_RE` accepts it). The 10 g
+the full book back). The printable vial sheets (`PLANTILLA_IMPRESION.xlsx` → `Sampling`, copied in
+cell by cell) keep the four vials of every kept tube plus their block's three header
+rows; block I (CamEug) is not in that template and is cloned from the last ternary block
+after the binaries, titled from `Lab_DES`. Vial codes stay `C4-T1` (hyphen; `CODE_RE`
+accepts it). `Sheet2` (the prep book's own binary vial sheet) is hidden as redundant. The 10 g
 DES prep table (`datos_des`) is cropped to the DES those tubes use; the 5 g variant
 (`Sheet1`) is hidden — every batch is made at 10 g to have spare. The console still
 prints the grams of each DES the tubes consume (cached `Lab_DES` estimates; binaries as
