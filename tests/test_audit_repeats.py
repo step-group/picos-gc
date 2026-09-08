@@ -3,7 +3,7 @@ import pytest
 pytest.importorskip("openpyxl")
 import openpyxl
 
-from audit_repeats import audit
+from audit_repeats import _2pe_outliers, audit
 
 
 def _sheet():
@@ -78,3 +78,34 @@ def test_verdicts():
     assert aq["repeat"] == "no" and aq["dropped"] == "Z-bin-B2" and aq["n_vials_used"] == 1
     assert aq["water_src"] == "bydiff" and aq["aq_terpene_max"] == "0.00020"
     assert len(by) == 10
+    # 0.20 raw, renormalized by the KF anchor (0.20 water / 0.60 organics): 0.20/0.75
+    assert by[("Z1", "Superior")]["w_2pe"] == "0.26667"
+
+
+def _tieline(system: str, aq: str, org: str) -> list[dict]:
+    base = {"system": system, "reason": "", "repeat": "no"}
+    return [
+        {**base, "water_src": "kf", "w_2pe": org},
+        {**base, "water_src": "bydiff", "w_2pe": aq},
+    ]
+
+
+def test_the_odd_2pe_rich_endpoint_is_flagged():
+    """Same organic phase (~0.88 2PE) in every block, so one aqueous number measured
+    once per block; F2-like rows miss the median by more than 1.5x."""
+    rows = []
+    for system, aq in (
+        ("A2", "0.01800"),
+        ("B1", "0.01990"),
+        ("C1", "0.01710"),
+        ("E2", "0.01610"),
+        ("F2", "0.02770"),
+    ):
+        rows += _tieline(system, aq, "0.88000")
+    rows += _tieline("A1", "0.00090", "0.03600")  # solvent-rich end: not in the family
+    _2pe_outliers(rows)
+    by = {(r["system"], r["water_src"]): r for r in rows}
+    assert by[("F2", "bydiff")]["reason"] == "aqueous_2pe_outlier"
+    assert by[("F2", "bydiff")]["repeat"] == "yes"
+    assert all(by[(s, "bydiff")]["repeat"] == "no" for s in ("A2", "B1", "C1", "E2", "A1"))
+    assert by[("F2", "kf")]["repeat"] == "no"  # the organic phase is not the suspect

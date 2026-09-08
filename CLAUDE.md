@@ -68,7 +68,13 @@ the pipeline), `aqueous_organics_suspect` (organic droplets in **every** kept aq
 the pair's summed pure-water solubility at 30 °C +20 % method tolerance, `AQ_SOLUBILITY_30C`
 × `AQ_SOLUBILITY_TOL` in `aq_terpene_max`, 2.8–4.9 g/L by pair) and `aqueous_replicate_mismatch` (kept aqueous
 vials' total organics differ > 3x with no droplet signature; the pipeline's
-`replicate_mismatch` is gated on a component > 10 % and never fires on aqueous phases).
+`replicate_mismatch` is gated on a component > 10 % and never fires on aqueous phases) and
+`aqueous_2pe_outlier` (the 2PE-rich endpoint of every block is the same system — organic
+phase 87–89 % 2PE, ~8 % water in all eight — so their aqueous phases are one number
+measured once per block, 16–20 g/L in the five sound ones; `_2pe_outliers` flags a miss
+of the median by > `AQ_2PE_OUTLIER`. It is a cross-block pass, the only rule that needs
+every sheet at once, and it cannot be an absolute literature bound: published 2PE
+solubility at 30 °C spans 21–33 g/L, wider than the disagreement).
 Informational, never a repeat: `single_vial` (one clean vial is accepted) and
 `dropped_replicate` — `fill_ternarios.aqueous_keep` already cherry-picks: it drops a vial
 that sampled the wrong phase (E2) or an aqueous vial with droplets whose pair is clean (D2,

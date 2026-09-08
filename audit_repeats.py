@@ -11,7 +11,8 @@ the pipeline's. Binary edge rows 25-28 get the same treatment (fill_ternarios'
 binary export carries no closure at all).
 
 Repeat reasons: missing_vials, low_closure, replicate_mismatch,
-aqueous_organics_suspect, aqueous_replicate_mismatch. Informational only (in
+aqueous_organics_suspect, aqueous_replicate_mismatch, aqueous_2pe_outlier.
+Informational only (in
 `flags`, never a repeat): single_vial (one clean vial is accepted), dropped_replicate
 (the pipeline already cherry-picked the clean vial, see fill_ternarios.aqueous_keep),
 a single KF titration (n_kf).
@@ -26,6 +27,7 @@ which an aqueous phase never has, so it is blind there. ponytail: no cherry-pick
 here — the only reference would be the same tie-line's organic phase via the 2PE
 distribution coefficient (40-50 in every clean system), and the one current case
 (D1) has a broken organic phase; add that pick when a case with a sound one appears.
+aqueous_2pe_outlier = see _2pe_outliers.
 
 Run: uv run audit_repeats.py   ->  out/repeat_list.csv + console table
 """
@@ -33,6 +35,7 @@ Run: uv run audit_repeats.py   ->  out/repeat_list.csv + console table
 from __future__ import annotations
 
 import csv
+import statistics
 from pathlib import Path
 
 import openpyxl
@@ -57,10 +60,14 @@ _ROOT = Path(__file__).resolve().parent
 WB = _ROOT / "Sistemas ternarios_MF_filled.xlsx"
 OUT = _ROOT / "out" / "repeat_list.csv"
 REPEAT_FLAGS = ("low_closure", "replicate_mismatch")
+# A tie-line whose organic phase is this rich in 2PE is the water+2PE binary with a few
+# % terpene in it, whatever the block: one number, measured once per block.
+ORG_2PE_BINARY_LIKE = 0.80
+AQ_2PE_OUTLIER = 1.5
 COLS = [
     "kind", "block", "system", "phase", "hba", "hbd", "codes", "dropped", "n_expected",
-    "n_with_areas", "n_vials_used", "n_kf", "closure", "water_src", "aq_terpene_max",
-    "aq_ceiling", "aq_organics_ratio", "flags", "repeat", "reason",
+    "n_with_areas", "n_vials_used", "n_kf", "closure", "water_src", "w_2pe",
+    "aq_terpene_max", "aq_ceiling", "aq_organics_ratio", "flags", "repeat", "reason",
 ]  # fmt: skip
 _BIN_CODE = {25: "T1", 26: "T2", 27: "B1", 28: "B2"}  # fill_ternarios._BIN_ROWS inverted
 
@@ -95,6 +102,33 @@ def _aqueous_organics(
     elif ratio is not None and ratio > MISMATCH_MAX:  # 2PE-only disagreement
         reasons.append("aqueous_replicate_mismatch")
     return max(terp), ratio, reasons
+
+
+def _2pe_outliers(rows: list[dict]) -> None:
+    """The 2PE-rich endpoint of every block is the same physical system: water + 2PE
+    carrying a few % terpene (organic phase 87-89 % 2PE and ~8 % water in all eight of
+    them), so their aqueous phases are one number measured once per block. Flag any that
+    misses their median by more than AQ_2PE_OUTLIER x.
+
+    A literature bound cannot do this job: published 2PE solubility at 30 °C spans
+    21-33 g/L, wider than the disagreement being tested. ponytail: plain median of ~8
+    values, no robust estimator — revisit if the family ever grows.
+    """
+    org = {r["system"]: r["w_2pe"] for r in rows if r["water_src"] == "kf"}
+    fam = [
+        r
+        for r in rows
+        if r["water_src"] == "bydiff"
+        and r["w_2pe"]
+        and float(org.get(r["system"]) or 0) > ORG_2PE_BINARY_LIKE
+    ]
+    if len(fam) < 3:
+        return
+    med = statistics.median(float(r["w_2pe"]) for r in fam)
+    for r in fam:
+        if not 1 / AQ_2PE_OUTLIER <= float(r["w_2pe"]) / med <= AQ_2PE_OUTLIER:
+            r["reason"] = ";".join(filter(None, (r["reason"], "aqueous_2pe_outlier")))
+            r["repeat"] = "yes"
 
 
 def _verdict(row: dict, flags: str) -> dict:
@@ -161,6 +195,7 @@ def _ternary(ws, block: str) -> list[dict]:
             "n_kf": _n_kf(ws, rows),
             "closure": c[9] if c else "",
             "water_src": c[12] if c else "",
+            "w_2pe": c[3] if c else "",
             "aq_terpene_max": f"{terp:.5f}" if terp is not None else "",
             "aq_ceiling": f"{terp_max:.5f}" if terp is not None else "",
             "aq_organics_ratio": f"{ratio:.2f}" if ratio is not None else "",
@@ -198,6 +233,7 @@ def _binary(ws, block: str) -> list[dict]:
             "n_kf": _n_kf(ws, reps),
             "closure": f"{closure:.5f}" if closure is not None else "",
             "water_src": src,
+            "w_2pe": "",  # the water-solvent edge carries no 2PE by construction
             "aq_terpene_max": f"{terp:.5f}" if terp is not None else "",
             "aq_ceiling": f"{terp_max:.5f}" if terp is not None else "",
             "aq_organics_ratio": f"{ratio:.2f}" if ratio is not None else "",
@@ -213,6 +249,7 @@ def audit(wb) -> list[dict]:
     for sheet in wb.sheetnames:
         ws, block = wb[sheet], sheet.split()[-1]
         rows += _ternary(ws, block) + _binary(ws, block)
+    _2pe_outliers(rows)  # cross-block: needs every sheet's rows in hand
     return rows
 
 
@@ -225,13 +262,14 @@ def main() -> None:
         w.writerows(rows)
     rep = [r for r in rows if r["repeat"] == "yes"]
     print(
-        f"{'point':<10}{'phase':<10}{'vials':<7}{'closure':<10}{'aq_terp':<9}{'aq_ratio':<10}reason"
+        f"{'point':<10}{'phase':<10}{'vials':<7}{'closure':<10}{'aq_terp':<9}"
+        f"{'aq_ratio':<10}{'w_2pe':<9}reason"
     )
     for r in rep:
         vials = f"{r['n_with_areas']}/{r['n_expected']}"
         print(
             f"{r['system']:<10}{r['phase']:<10}{vials:<7}{r['closure']:<10}"
-            f"{r['aq_terpene_max']:<9}{r['aq_organics_ratio']:<10}{r['reason']}"
+            f"{r['aq_terpene_max']:<9}{r['aq_organics_ratio']:<10}{r['w_2pe']:<9}{r['reason']}"
         )
     print(f"\n{len(rep)} of {len(rows)} points need repeating. Wrote {OUT}")
 
