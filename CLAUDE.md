@@ -119,3 +119,16 @@ The 5 g variant
 prints the grams of each DES the tubes consume (cached `Lab_DES` estimates; binaries as
 4 mL) as a check against that 10 g. Test:
 `tests/test_make_repeat_workbook.py` (same no-project invocation).
+
+Data-entry sheet for the repeat vials: `uv run make_entry_workbook.py [EXTRA_TUBE ...]` →
+`out/repeat_entry.xlsx`, one row per vial of the same tubes plus `EXTRA_TUBES` (the `2PE`
+water binary, `2PE-T1` … `2PE-B2`, and D2). **The user types into that file**: a re-run reads
+every unlocked cell of the existing one (`typed`), writes it back by vial code (`carry`),
+keeps the previous file as `.bak.xlsx`, and refuses to save if a typed value has no input
+cell left. Masses on every vial; KF only on the **organic** phase (picked from
+the campaign-1 KF < `ORGANIC_WATER_MAX`; `ORGANIC_OVERRIDE` for a tube with no history: `2PE`) and
+only typeable for the tubes in `FRESH_KF` (organic KF re-measured) — the others show their
+campaign-1 `U/V` read-only. Sheet protected without password; row 7 names the master
+workbook column of each value. Test: `tests/test_make_entry_workbook.py`. The filled
+`out/repeat_entry.xlsx` is the lab record of the repeat campaign's weighings and KF, so it is
+**tracked** (force-added despite `out/` being ignored; later edits show as modified).
