@@ -297,15 +297,28 @@ def des_need(tubes: set[str]) -> dict[str, float]:
     return need
 
 
+def round_args(argv: list[str], out: Path) -> tuple[set[str] | None, Path]:
+    """`--round N TUBE ...` -> (exactly those tubes, out with N after "repeat" in its
+    name); plain argv -> (None, out): round 1, whose tubes are repeat_list.csv plus argv.
+    A later round names its tubes and writes its own files, so round 1's typed lab
+    record is never rebuilt over."""
+    if argv[:1] != ["--round"]:
+        return None, out
+    n, tubes = argv[1], set(argv[2:])
+    return tubes, out.with_name(out.name.replace("repeat", f"repeat{n}", 1))
+
+
 def main() -> None:
-    tubes = tubes_from_list(LIST) | set(sys.argv[1:])
+    tubes, out = round_args(sys.argv[1:], OUT)
+    if tubes is None:
+        tubes = tubes_from_list(LIST) | set(sys.argv[1:])
     wb = openpyxl.load_workbook(SRC)
     trim(wb, tubes)
-    OUT.parent.mkdir(parents=True, exist_ok=True)
-    wb.save(OUT)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    wb.save(out)
     order = sorted(tubes, key=lambda t: (t.startswith("BIN"), t))
     n_tern = sum(not t.startswith("BIN") for t in tubes)
-    print(f"{len(tubes)} tubes: {' '.join(order)}; {4 * n_tern} ternary GC vials. Wrote {OUT}")
+    print(f"{len(tubes)} tubes: {' '.join(order)}; {4 * n_tern} ternary GC vials. Wrote {out}")
     print(
         "DES needed (est.): "
         + ", ".join(f"{d} {g:.1f} g" for d, g in sorted(des_need(tubes).items()))

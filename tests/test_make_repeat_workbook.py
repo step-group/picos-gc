@@ -93,3 +93,16 @@ def test_no_system_straddles_a_page():
 def test_unknown_tube_is_an_error():
     with pytest.raises(ValueError, match="Z9"):
         trim(openpyxl.load_workbook(SRC), {"Z9"})
+
+
+def test_later_rounds_name_their_tubes_and_their_own_files():
+    from pathlib import Path
+
+    from make_repeat_workbook import round_args
+
+    out = Path("out/aromas_equilibrios_repeat.xlsx")
+    assert round_args(["D2"], out) == (None, out)  # round 1: repeat_list.csv + argv
+    tubes, o = round_args(["--round", "2", "A1", "BIN1"], out)
+    assert tubes == {"A1", "BIN1"} and o.name == "aromas_equilibrios_repeat2.xlsx"
+    entry = round_args(["--round", "2"], Path("out/repeat_entry.xlsx"))[1]
+    assert entry.name == "repeat2_entry.xlsx"

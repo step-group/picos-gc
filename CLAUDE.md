@@ -87,6 +87,14 @@ Lab prep book for the repeat campaign: `uv run make_repeat_workbook.py [EXTRA_TU
 `out/aromas_equilibrios_repeat.xlsx`; how it trims, hides and paginates is in the
 `repeat-prep-book` skill — read it before touching that script.
 
+Later rounds: `--round N TUBE ...` on both `make_repeat_workbook.py` and
+`make_entry_workbook.py` takes exactly the named tubes (no `repeat_list.csv`, no
+`EXTRA_TUBES`), writes `out/aromas_equilibrios_repeat<N>.xlsx` / `out/repeat<N>_entry.xlsx`
+so round 1's typed record is never rebuilt over, and opens every organic KF cell (a new
+tube is a new tie-line). Round 2 (2026-09-23): A1–A5 BIN1 F5 I2. Block A's organic phase
+floats when thymol–carvone-rich (A1 A3 A4) and sinks when 2PE-rich (A2 A5); the entry
+sheet reads that off campaign-1 KF, so it is right, not a mix-up.
+
 Data-entry sheet for the repeat vials: `uv run make_entry_workbook.py [EXTRA_TUBE ...]` →
 `out/repeat_entry.xlsx`, one row per vial of the same tubes plus `EXTRA_TUBES` (the `2PE`
 water binary, `2PE-T1` … `2PE-B2`, and D2). **The user types into that file**: a re-run reads
