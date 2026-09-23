@@ -95,7 +95,7 @@ tube is a new tie-line). A `:aq` suffix (`B2:aq`) makes a tube aqueous-only: the
 lists only its aqueous vials, so `repeat_results.patch` replaces only those and the organic
 phase stays campaign 1's; the printed prep book still shows all four vials, labelled
 "(aq only)". Round 2 (2026-09-23): `--round 2 A1 A2 A3 A4 A5 BIN1 F5 I2 B2:aq B3:aq B4:aq
-BIN6:aq BIN8 I4:aq`; `repeat_results.TENTATIVE` lists the same points. Block A's organic phase
+BIN6:aq BIN8:aq I4:aq`; `repeat_results.TENTATIVE` lists the same points. Block A's organic phase
 floats when thymol–carvone-rich (A1 A3 A4) and sinks when 2PE-rich (A2 A5); the entry
 sheet reads that off campaign-1 KF, so it is right, not a mix-up.
 
