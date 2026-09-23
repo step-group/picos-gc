@@ -14,6 +14,8 @@ Run from the repo root: uv run python repeat_results.py
      out/repeat_tielines.csv   old (campaign 1) and new points of every repeated tube
      out/repeat_list_after.csv audit_repeats verdicts with the repeats in
      out/repeat_compare/<block>.png
+     out/{ternarios_resultados,binarios_tielines}_repeat.csv  every tie-line, repeats in,
+       TENTATIVE flagged -- what TESIS copies to data/raw/lle_ternary/
 """
 
 from __future__ import annotations
@@ -314,6 +316,36 @@ def plot_block(block, old, new, failed, two_pe, path):
 FIELDS = ["campaign", "block", "system", "phase", "w_2pe", "hba", "w_hba", "hbd", "w_hbd",
           "water", "closure", "flags", "water_src"]  # fmt: skip
 
+# Points the user judged wrong and put in round 2 (2026-09-23): every one of block A,
+# its water-solvent edge included, plus F5 and I2. Exported with a `tentative` flag so
+# they draw as suspect until round 2 replaces them; empty this set when it lands.
+TENTATIVE = {"A1", "A2", "A3", "A4", "A5", "A-bin", "F5", "I2"}
+TERN_HEAD = ["block", "system", "phase", "solute_2phet", "HBA", "HBA_wt", "HBD", "HBD_wt",
+             "water", "closure", "n_vials", "flags", "water_src"]  # fmt: skip
+BIN_HEAD = ["block", "phase", "HBA", "HBA_wt", "HBD", "HBD_wt", "water", "water_src", "flags"]
+
+
+def _flag(flags: str, system: str) -> str:
+    return ";".join(f for f in (flags, "tentative") if f) if system in TENTATIVE else flags
+
+
+def export(wb, tern_csv: Path, bin_csv: Path) -> None:
+    """The workbook's tie-lines in fill_ternarios' own export formats (the files TESIS
+    copies verbatim into data/raw/lle_ternary/), TENTATIVE points flagged. The binary
+    file gains a trailing `flags` column, the only way its tie-lines can carry one."""
+    rows = []
+    for sheet in wb.sheetnames:
+        ws, block = wb[sheet], sheet.split()[-1]
+        rows += results_rows(ws, block, ternary_recs(ws))
+    with tern_csv.open("w", newline="") as fh:
+        w = csv.writer(fh)
+        w.writerow(TERN_HEAD)
+        w.writerows(r[:11] + [_flag(r[11], r[1]), r[12]] for r in rows)
+    with bin_csv.open("w", newline="") as fh:
+        w = csv.writer(fh)
+        w.writerow(BIN_HEAD)
+        w.writerows(r + [_flag("", f"{r[0]}-bin")] for r in binary_tieline_rows(wb))
+
 
 def main() -> None:
     areas = integrate()
@@ -355,7 +387,9 @@ def main() -> None:
         plot_block(block, [p for p in old if p["block"] == block],
                    [p for p in new if p["block"] == block and p["system"] in systems],
                    failed, two_pe, cmp_dir / f"{block}.png")  # fmt: skip
-    print(f"\nWrote {OUT / 'repeat_tielines.csv'}, repeat_list_after.csv, {cmp_dir}/")
+    export(wb_new, OUT / "ternarios_resultados_repeat.csv", OUT / "binarios_tielines_repeat.csv")
+    print(f"\nWrote {OUT / 'repeat_tielines.csv'}, repeat_list_after.csv, {cmp_dir}/,")
+    print("  ternarios_resultados_repeat.csv, binarios_tielines_repeat.csv (for TESIS)")
 
 
 if __name__ == "__main__":
