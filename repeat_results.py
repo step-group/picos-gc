@@ -316,14 +316,14 @@ def plot_block(block, old, new, failed, two_pe, path):
 FIELDS = ["campaign", "block", "system", "phase", "w_2pe", "hba", "w_hba", "hbd", "w_hbd",
           "water", "closure", "flags", "water_src"]  # fmt: skip
 
-# Points the user judged wrong and put in round 2 (2026-09-23): A1-A5, F5 and I2; then
-# B2 B3 B4 and the F edge (aqueous phase only), the I edge and I4 (aqueous only). The A
-# edge (BIN1) was in and came out again the same day: its round-1 repeat is good, the
-# user's call. Exported with a `tentative` flag -- on the whole tie-line, since a
-# tie-line is drawn whole -- so they draw as suspect until round 2 replaces them; empty
-# this set when it lands.
-TENTATIVE = {"A1", "A2", "A3", "A4", "A5", "F5", "I2",
-             "B2", "B3", "B4", "F-bin", "I-bin", "I4"}  # fmt: skip
+# Points the user judged wrong and put in round 2 (settled 2026-09-23): A1, A4, A5, F5
+# and I2 whole; B2 B3 B4 and the F edge aqueous phase only. A5 is the aqueous endpoint
+# with 4x the binary's terpene at the 2PE-rich end, where the trend puts it near zero;
+# A1 and A4 sit 3x above the binary. Taken back out the same day, final as they stand:
+# the A edge (BIN1, its round-1 repeat is good), A2, A3, I4 and the I edge. Exported with
+# a `tentative` flag -- on the whole tie-line, since a tie-line is drawn whole -- so they
+# draw as suspect until round 2 replaces them; empty this set when it lands.
+TENTATIVE = {"A1", "A4", "A5", "F5", "I2", "B2", "B3", "B4", "F-bin"}
 TERN_HEAD = ["block", "system", "phase", "solute_2phet", "HBA", "HBA_wt", "HBD", "HBD_wt",
              "water", "closure", "n_vials", "flags", "water_src"]  # fmt: skip
 BIN_HEAD = ["block", "phase", "HBA", "HBA_wt", "HBD", "HBD_wt", "water", "water_src", "flags"]
