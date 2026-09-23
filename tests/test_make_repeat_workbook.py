@@ -106,3 +106,9 @@ def test_later_rounds_name_their_tubes_and_their_own_files():
     assert tubes == {"A1", "BIN1"} and o.name == "aromas_equilibrios_repeat2.xlsx"
     entry = round_args(["--round", "2"], Path("out/repeat_entry.xlsx"))[1]
     assert entry.name == "repeat2_entry.xlsx"
+
+
+def test_aqueous_only_tubes_are_split_off_their_suffix():
+    from make_repeat_workbook import split_aq
+
+    assert split_aq({"A1", "B2:aq", "BIN6:aq"}) == ({"A1", "B2", "BIN6"}, {"B2", "BIN6"})

@@ -28,7 +28,7 @@ from openpyxl.styles import Alignment, Border, Font, PatternFill, Protection, Si
 from openpyxl.worksheet.datavalidation import DataValidation
 
 from fill_ternarios import _BIN_ROWS, BIN_TO_BLOCK, ORGANIC_WATER_MAX, WB_IN, _vial_rows
-from make_repeat_workbook import LIST, SAMPLE_UL, round_args, tubes_from_list
+from make_repeat_workbook import LIST, SAMPLE_UL, round_args, split_aq, tubes_from_list
 
 OUT = Path(__file__).resolve().parent / "out" / "repeat_entry.xlsx"
 # Organic KF re-measured by the user in the repeat campaign (2026-09-22); every other
@@ -102,7 +102,9 @@ def _row(ws, r: int, tube: str, code: str, ph: str, role: str) -> None:
     ws[f"L{r}"].number_format = "0.00"
 
 
-def build(tubes: set[str], fresh: set[str] = FRESH_KF) -> openpyxl.Workbook:
+def build(
+    tubes: set[str], fresh: set[str] = FRESH_KF, aq_only: set[str] = frozenset()
+) -> openpyxl.Workbook:
     master = openpyxl.load_workbook(WB_IN)
     wb = openpyxl.Workbook()
     ws = wb.active
@@ -130,7 +132,9 @@ def build(tubes: set[str], fresh: set[str] = FRESH_KF) -> openpyxl.Workbook:
     for tube in sorted(tubes, key=_order):
         kf = {} if tube == "2PE" else campaign1_kf(master, tube)
         org = organic_phase(tube, kf)
-        for i, (ph, rep) in enumerate(VIALS):
+        # an aqueous-only tube keeps campaign 1's organic phase: no row, nothing patched
+        vials = [v for v in VIALS if tube not in aq_only or v[0] != org]
+        for i, (ph, rep) in enumerate(vials):
             role = "organic" if ph == org else "aqueous"
             _row(ws, r, tube, f"{tube}-{ph}{rep}", ph, role)
             old = kf.get((ph, rep), (None, None))
@@ -214,15 +218,18 @@ def main() -> None:
         tubes, fresh = tubes_from_list(LIST) | EXTRA_TUBES | set(sys.argv[1:]), FRESH_KF
     else:  # a later round's tubes are new tie-lines: every organic phase gets its own KF
         fresh = tubes
+    tubes, aq_only = split_aq(tubes)
+    fresh = split_aq(fresh)[0]
     out.parent.mkdir(exist_ok=True)
-    wb = build(tubes, fresh)
+    wb = build(tubes, fresh, aq_only)
     if out.exists():  # the user types into out: a rebuild keeps every typed cell
         lost = carry(wb.active, typed(openpyxl.load_workbook(out).active))
         if lost:
             sys.exit(f"refusing to overwrite {out.name}, these inputs have no cell left:\n  " + "\n  ".join(lost))
         shutil.copy2(out, out.with_suffix(".bak.xlsx"))
     wb.save(out)
-    print(f"{out}: {len(tubes)} tubes, {4 * len(tubes)} vials ({', '.join(sorted(tubes, key=_order))})")
+    n_vials = sum(2 if t in aq_only else 4 for t in tubes)
+    print(f"{out}: {len(tubes)} tubes, {n_vials} vials ({', '.join(sorted(tubes, key=_order))})")
 
 
 if __name__ == "__main__":

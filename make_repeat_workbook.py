@@ -183,7 +183,7 @@ def _copy_sheet(src, wb, title: str):
     return dst
 
 
-def _sampling(wb, tubes: set[str], lab, keep_lab: set[int]) -> None:
+def _sampling(wb, tubes: set[str], lab, keep_lab: set[int], aq_only=frozenset()) -> None:
     """Bring the print template's Sampling sheet in and keep only the kept tubes' four
     vial rows plus their block's three header rows (title, method line, column header).
     A ternary block the template lacks (I — CamEug) is cloned from the last ternary block
@@ -235,10 +235,12 @@ def _sampling(wb, tubes: set[str], lab, keep_lab: set[int]) -> None:
             ws.row_dimensions[r].height = SAMPLING_ROW_H
         elif ws[f"A{r}"].value == "System":
             ws.row_dimensions[r].height = SAMPLING_HEAD_H
+        if ws[f"A{r}"].value in aq_only:  # the tube is prepared whole, only sampled aqueous
+            ws[f"A{r}"] = f"{ws[f'A{r}'].value} (aq only)"
     _paginate(ws)
 
 
-def trim(wb, tubes: set[str]) -> None:
+def trim(wb, tubes: set[str], aq_only: set[str] = frozenset()) -> None:
     lab = wb["Lab_DES"]
     known = {lab[f"A{r}"].value for r in LAB_ROWS}
     if missing := tubes - known:
@@ -271,7 +273,7 @@ def trim(wb, tubes: set[str]) -> None:
         _backfill(feed, r)
     _hide(feed, FEED_ROWS, keep_feed)
 
-    _sampling(wb, tubes, lab, keep_lab)
+    _sampling(wb, tubes, lab, keep_lab, aq_only)
 
 
 def des_need(tubes: set[str]) -> dict[str, float]:
@@ -308,17 +310,30 @@ def round_args(argv: list[str], out: Path) -> tuple[set[str] | None, Path]:
     return tubes, out.with_name(out.name.replace("repeat", f"repeat{n}", 1))
 
 
+AQ_ONLY = ":aq"
+
+
+def split_aq(tokens: set[str]) -> tuple[set[str], set[str]]:
+    """`B2:aq` -> tube B2, aqueous phase only (its organic phase stays campaign 1's).
+    Returns (every tube, the aqueous-only ones)."""
+    aq = {t.removesuffix(AQ_ONLY) for t in tokens if t.endswith(AQ_ONLY)}
+    return {t.removesuffix(AQ_ONLY) for t in tokens}, aq
+
+
 def main() -> None:
     tubes, out = round_args(sys.argv[1:], OUT)
     if tubes is None:
         tubes = tubes_from_list(LIST) | set(sys.argv[1:])
+    tubes, aq_only = split_aq(tubes)
     wb = openpyxl.load_workbook(SRC)
-    trim(wb, tubes)
+    trim(wb, tubes, aq_only)
     out.parent.mkdir(parents=True, exist_ok=True)
     wb.save(out)
     order = sorted(tubes, key=lambda t: (t.startswith("BIN"), t))
-    n_tern = sum(not t.startswith("BIN") for t in tubes)
-    print(f"{len(tubes)} tubes: {' '.join(order)}; {4 * n_tern} ternary GC vials. Wrote {out}")
+    n_vials = sum(2 if t in aq_only else 4 for t in tubes if not t.startswith("BIN"))
+    print(f"{len(tubes)} tubes: {' '.join(order)}; {n_vials} ternary GC vials. Wrote {out}")
+    if aq_only:
+        print(f"aqueous phase only: {' '.join(sorted(aq_only))}")
     print(
         "DES needed (est.): "
         + ", ".join(f"{d} {g:.1f} g" for d, g in sorted(des_need(tubes).items()))
