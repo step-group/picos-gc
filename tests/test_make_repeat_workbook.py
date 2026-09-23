@@ -108,6 +108,22 @@ def test_later_rounds_name_their_tubes_and_their_own_files():
     assert entry.name == "repeat2_entry.xlsx"
 
 
+def test_bench_printout_keeps_the_bench_sheets_and_drops_computed_columns(tmp_path):
+    from make_repeat_workbook import print_copy
+
+    wb = openpyxl.load_workbook(SRC)
+    trim(wb, {"A1", "BIN1"})
+    wb.save(tmp_path / "book.xlsx")
+    pr = openpyxl.load_workbook(print_copy(tmp_path / "book.xlsx"))
+    visible = [ws.title for ws in pr.worksheets if ws.sheet_state == "visible"]
+    assert visible == ["datos_des", "Lab_DES", "Sampling"]
+    s = pr["Sampling"]
+    assert all(s.column_dimensions[c].hidden for c in "HIJ")
+    assert pr["datos_des"].column_dimensions["M"].hidden
+    # V_sample lived in the hidden H-J cells: it must still print, from K
+    assert any("V_sample: 300" in str(s[f"K{r}"].value) for r in range(1, s.max_row + 1))
+
+
 def test_aqueous_only_tubes_are_split_off_their_suffix():
     from make_repeat_workbook import split_aq
 

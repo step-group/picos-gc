@@ -85,7 +85,10 @@ is an empty gitlink): `uv run --no-project --with openpyxl --with pytest pytest 
 
 Lab prep book for the repeat campaign: `uv run make_repeat_workbook.py [EXTRA_TUBE ...]` →
 `out/aromas_equilibrios_repeat.xlsx`; how it trims, hides and paginates is in the
-`repeat-prep-book` skill — read it before touching that script.
+`repeat-prep-book` skill — read it before touching that script. It also writes the **bench
+printout**, `*_print.xlsx` + `.pdf` (headless LibreOffice): only DES prep, tube prep and the
+GC vial sheets, the columns computed from what gets written in hidden (`PRINT_HIDE_COLS`),
+their width given to Notes so the vial-sheet page breaks still hold. Print that one.
 
 Later rounds: `--round N TUBE ...` on both `make_repeat_workbook.py` and
 `make_entry_workbook.py` takes exactly the named tubes (no `repeat_list.csv`, no

@@ -21,6 +21,8 @@ from __future__ import annotations
 
 import csv
 import re
+import shutil
+import subprocess
 import sys
 from copy import copy
 from itertools import groupby
@@ -64,6 +66,12 @@ DES_BIN_ROW = 29  # below the table's legend (row 27): one duplicated row per bi
 DES_CLUTTER_ROWS = range(1, 14)  # datos_des' LLE/VLE status matrix above the prep table
 DES_EXP_COLS = "GL"  # m_HBA exp / m_HBD exp of the first campaign: cleared, to be weighed anew
 HIDE_SHEETS = ("Sheet1", "Sheet2")  # Sheet2 (binary GC vials) is superseded by Sampling
+# The bench printout (`*_print.xlsx/.pdf`): only the sheets used at the bench, in bench
+# order (DES prep, tube prep, GC vials), without the columns computed from what gets
+# written in -- blank on paper, they only take room. The target masses and guide volumes
+# stay: they are what is weighed to.
+PRINT_SHEETS = ("datos_des", "Lab_DES", "Sampling")
+PRINT_HIDE_COLS = {"datos_des": "M", "Sampling": "HIJ"}  # n_HBA/n_HBD; m_sample m_solvent DF
 BIN_V_DES_ML = 4  # Lab_DES F59:F66 (binary rows carry V_DES in F, no density)
 
 
@@ -322,6 +330,48 @@ def split_aq(tokens: set[str]) -> tuple[set[str], set[str]]:
     return {t.removesuffix(AQ_ONLY) for t in tokens}, aq
 
 
+def print_copy(path: Path) -> Path:
+    """`<path>_print.xlsx`: PRINT_SHEETS visible, PRINT_HIDE_COLS hidden. The Sampling
+    block titles keep "V_sample: 300 µL" and the KF legend in the hidden H-J cells, so
+    those move into K first (they spill into the empty Notes cell beside it)."""
+    wb = openpyxl.load_workbook(path)
+    for ws in wb.worksheets:
+        ws.sheet_state = "visible" if ws.title in PRINT_SHEETS else "hidden"
+    wb.active = wb.sheetnames.index(PRINT_SHEETS[0])  # a hidden active sheet won't open
+    ws = wb["Sampling"]
+    for r in range(1, ws.max_row + 1):
+        h, i, j, k = (ws[f"{c}{r}"].value for c in "HIJK")
+        if h == "V_sample:":
+            ws[f"K{r}"] = f"V_sample: {i} {j} {k}"
+        elif isinstance(i, str) and i.startswith("■"):
+            ws[f"K{r}"] = f"{i}   {j}"
+    for title, cols in PRINT_HIDE_COLS.items():
+        for c in cols:
+            wb[title].column_dimensions[c].hidden = True
+    # Hand the hidden width to Notes: fit-to-width then scales Sampling exactly as before,
+    # and _paginate's breaks (SAMPLING_PAGE_H is measured at that scale) still land
+    # between systems. Narrower, it prints larger and splits A5 and F5 across pages.
+    dims = ws.column_dimensions
+    dims["L"].width = (dims["L"].width or 13) + sum(dims[c].width or 13 for c in "HIJ")
+    out = path.with_name(f"{path.stem}_print{path.suffix}")
+    wb.save(out)
+    return out
+
+
+def to_pdf(xlsx: Path) -> Path | None:
+    """Headless LibreOffice export next to the workbook; None when it is not installed."""
+    soffice = shutil.which("soffice") or shutil.which("libreoffice")
+    if not soffice:
+        return None
+    subprocess.run(
+        [soffice, "--headless", "--convert-to", "pdf", "--outdir", str(xlsx.parent), str(xlsx)],
+        capture_output=True,
+        check=True,
+        timeout=300,
+    )
+    return xlsx.with_suffix(".pdf")
+
+
 def main() -> None:
     tubes, out = round_args(sys.argv[1:], OUT)
     if tubes is None:
@@ -340,6 +390,8 @@ def main() -> None:
         "DES needed (est.): "
         + ", ".join(f"{d} {g:.1f} g" for d, g in sorted(des_need(tubes).items()))
     )
+    pdf = to_pdf(print_copy(out))
+    print(f"Bench printout: {pdf}" if pdf else "Bench printout: no LibreOffice, open the _print.xlsx")
 
 
 if __name__ == "__main__":
