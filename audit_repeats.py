@@ -185,13 +185,18 @@ def _verdict(row: dict, flags: str) -> dict:
     return row
 
 
-def _ternary(ws, block: str) -> list[dict]:
+def _groups(ws) -> dict[tuple[int, str], list[int]]:
     groups: dict[tuple[int, str], list[int]] = {}
     for row, sysnum, ph, _rep, phase in _vial_rows(ws):
         if phase:
             groups.setdefault((sysnum, ph), []).append(row)
+    return groups
+
+
+def ternary_recs(ws) -> list[dict]:
+    """Per-vial records of the injected rows 5-24, the shape fill_block returns."""
     recs = []
-    for (sysnum, ph), rows in groups.items():
+    for (sysnum, ph), rows in _groups(ws).items():
         for r in rows:
             if not _has_areas(ws, r):
                 continue
@@ -204,6 +209,12 @@ def _ternary(ws, block: str) -> list[dict]:
                 "U": _num(ws, f"U{r}"), "V": _num(ws, f"V{r}"),
             }  # fmt: skip
             recs.append(rec)
+    return recs
+
+
+def _ternary(ws, block: str) -> list[dict]:
+    groups = _groups(ws)
+    recs = ternary_recs(ws)
     # results_rows: [block, system, phase, ..., closure(9), n_vials(10), flags(11), src(12)]
     computed = {(r[1], r[2]): r for r in results_rows(ws, block, recs)}
     f2, g2, h2 = _num(ws, "F2"), _num(ws, "G2"), _num(ws, "H2")

@@ -99,3 +99,17 @@ campaign-1 `U/V` read-only. Sheet protected without password; row 7 names the ma
 workbook column of each value. Test: `tests/test_make_entry_workbook.py`. The filled
 `out/repeat_entry.xlsx` is the lab record of the repeat campaign's weighings and KF, so it is
 **tracked** (force-added despite `out/` being ignored; later edits show as modified).
+
+## Repeat campaign results
+`PYTHONPATH=src:. .venv/bin/python repeat_results.py` (the project venv cannot sync, see above)
+integrates `FLECK_TERPENOS2026/REPETICIONES_22SEP2026/` with its **own** retention-time map
+(`REPEAT_TR`: a new 17-min method, 2PE at 10.72, carvone at 9.67 — `label_terpenos`' maps
+would read carvone as 2PE) and the block taken from the sample-name prefix (the folder mixes
+blocks; `BIN<n>` → `BIN_TO_BLOCK`). It patches each weighed repeat vial (masses, KF from
+`out/repeat_entry.xlsx`, areas) over its campaign-1 row in an in-memory copy of
+`Sistemas ternarios_MF_filled.xlsx`, whole tubes at a time, and runs the unchanged chain
+(`results_rows`, `binary_tieline_rows`, `audit`). Slopes: CC_MF, the May calibration (the batch
+has no standards). The water–2PE binary has no sheet: organic 2PE = 1 − KF, aqueous from the
+GC. Writes `out/repeat_tielines.csv` (old vs new per repeated tube), `out/repeat_list_after.csv`,
+`out/repeat_compare/<block>.png`. Repeat aqueous vials carry no KF, so `results_rows` takes a
+KF-less mostly-water phase as by-difference with a blank closure (`binary_vials`' rule).

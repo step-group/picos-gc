@@ -534,6 +534,12 @@ def results_rows(ws, block: str, recs: list[dict], aqueous_bydiff: bool = True) 
         # anyway, so the KF only classifies the phase and feeds the closure diagnostic.
         kf = [c for v in use for c in v["kf"]] or [c for v in vials for c in v["kf"]]
         w, x, y, z = avg(sol), avg(hba), avg(hbd), avg(kf)
+        # No KF at all (the repeat campaign titrated organic phases only): a phase the GC
+        # finds mostly water is aqueous, water by difference — binary_vials' rule. Its
+        # closure is 1 by construction, so it is left blank rather than reported.
+        no_kf = not kf and None not in (w, x, y) and w + x + y < ORGANIC_WATER_MAX
+        if no_kf:
+            z = 1.0 - (w + x + y)
         flags = [] if (g2 and h2) else ["slopes_missing"]
         closure = None
         src = ""
@@ -559,7 +565,9 @@ def results_rows(ws, block: str, recs: list[dict], aqueous_bydiff: bool = True) 
                 norm = [w / tot, x / tot, y / tot, z / tot]
                 src = "kf"
             lo, hi = CLOSURE_BAND
-            if not (lo <= closure <= hi):
+            if no_kf:
+                closure = None
+            elif not (lo <= closure <= hi):
                 flags.append("low_closure")
             if _replicate_mismatch([v["raw"] for v in use], w, x, y) > MISMATCH_MAX:
                 flags.append("replicate_mismatch")
