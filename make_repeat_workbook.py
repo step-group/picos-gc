@@ -236,7 +236,9 @@ def _sampling(wb, tubes: set[str], lab, keep_lab: set[int], aq_only=frozenset())
         elif ws[f"A{r}"].value == "System":
             ws.row_dimensions[r].height = SAMPLING_HEAD_H
         if ws[f"A{r}"].value in aq_only:  # the tube is prepared whole, only sampled aqueous
-            ws[f"A{r}"] = f"{ws[f'A{r}'].value} (aq only)"
+            # Notes (L), not the System cell: column A is five characters wide and
+            # clipped "I4 (aq only)" to "4 (aq only" on paper.
+            ws[f"L{r}"] = "AQUEOUS PHASE ONLY (organic: campaign 1, not sampled)"
     _paginate(ws)
 
 
