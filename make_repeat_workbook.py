@@ -31,7 +31,7 @@ from pathlib import Path
 import openpyxl
 from openpyxl.worksheet.pagebreak import Break
 
-from fill_ternarios import BIN_TO_BLOCK
+from fill_ternarios import _BIN_ROWS, BIN_TO_BLOCK, ORGANIC_WATER_MAX, WB_IN, _vial_rows
 
 _ROOT = Path(__file__).resolve().parent
 SRC = _ROOT / "aromas_equilibrios_vfinal.xlsx"
@@ -191,6 +191,35 @@ def _copy_sheet(src, wb, title: str):
     return dst
 
 
+# Organic phase where campaign-1 KF cannot decide it. 2PE-water has no history: the
+# 2PE-rich organic phase is Inferior in all eight blocks, so bottom. Flip to "T" if it floats.
+ORGANIC_OVERRIDE = {"2PE": "B"}
+
+
+def _sheet_of(tube: str) -> str:
+    return f"Bloque {BIN_TO_BLOCK[int(tube[3:])] if tube.startswith('BIN') else tube[0]}"
+
+
+def campaign1_kf(wb, tube: str) -> dict[tuple[str, int], tuple]:
+    """(phase, rep) -> (KF1, KF2) of the tube's campaign-1 vials, read from U/V."""
+    ws = wb[_sheet_of(tube)]
+    if tube.startswith("BIN"):
+        rows = dict(_BIN_ROWS)
+    else:
+        rows = {(ph, rep): row for row, n, ph, rep, _ in _vial_rows(ws) if n == int(tube[1:])}
+    return {key: (ws[f"U{row}"].value, ws[f"V{row}"].value) for key, row in rows.items()}
+
+
+def organic_phase(tube: str, kf: dict) -> str:
+    if tube in ORGANIC_OVERRIDE:
+        return ORGANIC_OVERRIDE[tube]
+    for ph in "TB":
+        vals = [v for rep in (1, 2) for v in kf.get((ph, rep), ()) if isinstance(v, int | float)]
+        if vals and sum(vals) / len(vals) < 100 * ORGANIC_WATER_MAX:
+            return ph
+    raise ValueError(f"{tube}: no campaign-1 KF below {100 * ORGANIC_WATER_MAX:.0f} % in either phase")
+
+
 def _sampling(wb, tubes: set[str], lab, keep_lab: set[int], aq_only=frozenset()) -> None:
     """Bring the print template's Sampling sheet in and keep only the kept tubes' four
     vial rows plus their block's three header rows (title, method line, column header).
@@ -236,6 +265,19 @@ def _sampling(wb, tubes: set[str], lab, keep_lab: set[int], aq_only=frozenset())
             ws[f"I{r}"], ws[f"K{r}"] = str(SAMPLE_UL), f"+{IPA_UL} µL IPA"
             df = f"DF≈{(SAMPLE_UL + IPA_UL) / SAMPLE_UL:.1f}"
             ws[f"A{r + 1}"] = re.sub(r"DF[=≈][\d.]+", df, ws[f"A{r + 1}"].value)
+    # An aqueous-only tube's organic vials are not sampled (their KF is recycled from
+    # campaign 1): hide those two rows. The tube code moves to its first visible row, where
+    # the Notes marker below and _paginate's system-start test both look for it.
+    if aq_only:
+        master = openpyxl.load_workbook(WB_IN)
+        firsts = [(r, ws[f"A{r}"].value) for r in range(1, ws.max_row + 1)]
+        for r, tube in [(r, t) for r, t in firsts if t in aq_only]:  # before A moves
+            org = organic_phase(tube, campaign1_kf(master, tube))
+            rows = dict(zip(("T", "B"), (range(r, r + 2), range(r + 2, r + 4)), strict=True))
+            for o in rows[org]:
+                ws.row_dimensions[o].hidden = True
+            if org == "T":
+                ws[f"A{r + 2}"], ws[f"A{r}"] = tube, None
     # Last, so the cloned rows are covered too: every vial row and column header gets the
     # one writable height, whichever block of the template it came from.
     for r in range(1, ws.max_row + 1):
@@ -246,7 +288,7 @@ def _sampling(wb, tubes: set[str], lab, keep_lab: set[int], aq_only=frozenset())
         if ws[f"A{r}"].value in aq_only:  # the tube is prepared whole, only sampled aqueous
             # Notes (L), not the System cell: column A is five characters wide and
             # clipped "I4 (aq only)" to "4 (aq only" on paper.
-            ws[f"L{r}"] = "AQUEOUS PHASE ONLY (organic: campaign 1, not sampled)"
+            ws[f"L{r}"] = "Aqueous phase only (organic phase and its KF: campaign 1)"
     _paginate(ws)
 
 

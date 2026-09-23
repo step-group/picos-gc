@@ -27,16 +27,21 @@ from openpyxl.comments import Comment
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Protection, Side
 from openpyxl.worksheet.datavalidation import DataValidation
 
-from fill_ternarios import _BIN_ROWS, BIN_TO_BLOCK, ORGANIC_WATER_MAX, WB_IN, _vial_rows
-from make_repeat_workbook import LIST, SAMPLE_UL, round_args, split_aq, tubes_from_list
+from fill_ternarios import BIN_TO_BLOCK, WB_IN
+from make_repeat_workbook import (
+    LIST,
+    SAMPLE_UL,
+    campaign1_kf,
+    organic_phase,
+    round_args,
+    split_aq,
+    tubes_from_list,
+)
 
 OUT = Path(__file__).resolve().parent / "out" / "repeat_entry.xlsx"
 # Organic KF re-measured by the user in the repeat campaign (2026-09-22); every other
 # repeat tube keeps its campaign-1 organic KF.
 FRESH_KF = {"C4", "C5", "D1", "E1", "I1", "2PE"}
-# Organic phase where campaign-1 KF cannot decide it. 2PE-water has no history: the
-# 2PE-rich organic phase is Inferior in all eight blocks, so bottom. Flip to "T" if it floats.
-ORGANIC_OVERRIDE = {"2PE": "B"}
 # Re-prepared although repeat_list.csv has no repeat=yes point for them (D2: dropped replicate).
 EXTRA_TUBES = {"2PE", "D2"}
 VIALS = (("T", 1), ("T", 2), ("B", 1), ("B", 2))
@@ -55,30 +60,6 @@ REUSED = PatternFill("solid", fgColor="D9D9D9")
 AQUEOUS = PatternFill("solid", fgColor="808080")
 UNLOCKED = Protection(locked=False)
 TUBE_TOP = Border(top=Side(style="thin"))
-
-
-def _sheet_of(tube: str) -> str:
-    return f"Bloque {BIN_TO_BLOCK[int(tube[3:])] if tube.startswith('BIN') else tube[0]}"
-
-
-def campaign1_kf(wb, tube: str) -> dict[tuple[str, int], tuple]:
-    """(phase, rep) -> (KF1, KF2) of the tube's campaign-1 vials, read from U/V."""
-    ws = wb[_sheet_of(tube)]
-    if tube.startswith("BIN"):
-        rows = dict(_BIN_ROWS)
-    else:
-        rows = {(ph, rep): row for row, n, ph, rep, _ in _vial_rows(ws) if n == int(tube[1:])}
-    return {key: (ws[f"U{row}"].value, ws[f"V{row}"].value) for key, row in rows.items()}
-
-
-def organic_phase(tube: str, kf: dict) -> str:
-    if tube in ORGANIC_OVERRIDE:
-        return ORGANIC_OVERRIDE[tube]
-    for ph in "TB":
-        vals = [v for rep in (1, 2) for v in kf.get((ph, rep), ()) if isinstance(v, int | float)]
-        if vals and sum(vals) / len(vals) < 100 * ORGANIC_WATER_MAX:
-            return ph
-    raise ValueError(f"{tube}: no campaign-1 KF below {100 * ORGANIC_WATER_MAX:.0f} % in either phase")
 
 
 def _order(tube: str) -> tuple:
