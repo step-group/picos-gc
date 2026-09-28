@@ -19,6 +19,10 @@ Run from the repo root: uv run python repeat_results.py
      out/repeat_compare/<block>.png
      out/{ternarios_resultados,binarios_tielines}_repeat.csv  every tie-line, repeats in,
        TENTATIVE flagged -- what TESIS copies to data/raw/lle_ternary/
+     out/vial_measurements_repeat.csv   every CURRENT vial (the tie-lines' inputs)
+     out/vial_ledger.csv                every vial EVER injected, campaign 1 and each round,
+       with round / status / superseded_by -- the complete record; the file above is its
+       `current` rows
 """
 
 from __future__ import annotations
@@ -380,6 +384,30 @@ def patched(rounds: list[tuple[dict, dict]]) -> tuple[openpyxl.Workbook, list[st
     return wb, tubes, rows
 
 
+LEDGER_KEY = ("block", "kind", "system", "phase_position", "vial")
+
+
+def ledger(rounds: list[tuple[str, dict, dict]]) -> list[dict]:
+    """Every vial ever injected, one row per injection campaign: the campaign-1 workbook
+    (round 0), then the rows each round overwrote, in ROUNDS order. `status` is `current`
+    for a vial's last occurrence and `superseded` before it, `superseded_by` the batch
+    that replaced it. The current rows ARE vial_measurements_repeat.csv (main checks it).
+    The water-2PE tube has no workbook sheet, so it is in neither (two_pe_endpoint)."""
+    wb = openpyxl.load_workbook(WB_OUT, data_only=True)
+    out = [{**r, "round": 0} for r in vial_rows(wb)]
+    for i, (batch, areas, entry) in enumerate(rounds, 1):
+        rows: set = set()
+        patch(wb, areas, entry, rows, batch)
+        out += [{**r, "round": i} for r in vial_rows(wb, frozenset(rows)) if r["batch"] == batch]
+    later: dict[tuple, dict] = {}
+    for r in reversed(out):  # walking back, `later` holds the next occurrence of each key
+        k = tuple(r[c] for c in LEDGER_KEY)
+        nxt = later.get(k)
+        r["status"], r["superseded_by"] = ("superseded", nxt["batch"]) if nxt else ("current", "")
+        later[k] = r
+    return out
+
+
 def main() -> None:
     rounds = [(batch.name, integrate(batch), read_entry(entry)) for batch, entry in ROUNDS]
     wb_old, _, _ = patched(rounds[:-1])
@@ -434,9 +462,23 @@ def main() -> None:
         w = csv.DictWriter(fh, fieldnames=list(vials[0]))
         w.writeheader()
         w.writerows(vials)
+    led = ledger(rounds)
+
+    def keyed(rs):
+        return sorted(({c: r[c] for c in vials[0]} for r in rs), key=lambda r: [str(r[c]) for c in LEDGER_KEY])
+
+    if keyed(r for r in led if r["status"] == "current") != keyed(vials):
+        raise SystemExit("vial ledger's current rows differ from vial_measurements_repeat.csv")
+    with (OUT / "vial_ledger.csv").open("w", newline="") as fh:
+        w = csv.DictWriter(fh, fieldnames=list(led[0]))
+        w.writeheader()
+        w.writerows(led)
     print(f"\nWrote {OUT / 'repeat_tielines.csv'}, repeat_list_after.csv, {cmp_dir}/,")
     print("  ternarios_resultados_repeat.csv, binarios_tielines_repeat.csv,")
-    print("  vial_measurements_repeat.csv (for TESIS)")
+    print("  vial_measurements_repeat.csv and vial_ledger.csv (for TESIS):")
+    for i, (batch, _, _) in enumerate(rounds, 1):
+        n = sum(r["superseded_by"] == batch for r in led)
+        print(f"  round {i} ({batch}) superseded {n} vials")
 
 
 if __name__ == "__main__":

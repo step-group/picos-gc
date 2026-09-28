@@ -4,6 +4,19 @@ CLI tool for automatic multi-peak integration of Shimadzu `.gcd` GC files.
 
 Run: `uv run picos-gc *.gcd` (or a directory). Test: `uv run pytest`. Uses `uv`, not pip/python directly.
 
+## Which file holds what (LLE measurements)
+- **Inputs, hand-made, never written by a script:** `Sistemas ternarios_MF.xlsx` (campaign 1:
+  masses, KF), one typed entry sheet per repeat round (`out/repeat_entry.xlsx`,
+  `out/repeat2_entry.xlsx`, `out/repeat3_entry.xlsx` — force-tracked although `out/` is
+  ignored; `git add -f`), one GC folder per batch under `FLECK_TERPENOS2026/`, `CC_MF.xlsx`.
+- **The complete record:** `out/vial_ledger.csv` (`repeat_results.py`) — every vial ever
+  injected, campaign 1 (`round` 0) and each round in `ROUNDS`, with `status`
+  current/superseded and `superseded_by`. "Did I re-do X?" is answered here.
+- **Derived views:** `out/vial_measurements_repeat.csv` (the ledger's current rows; main
+  checks they agree), the tie-line exports `out/*_repeat.csv`, the filled workbook. TESIS
+  copies the ledger, the current vials, the tie-lines and `gc_calibration.csv`.
+- A new round: add its GC folder and entry sheet, append it to `ROUNDS`, re-run.
+
 ## Architecture (`src/picos_gc/`)
 - `deconvolution.py` — EMG (exponentially-modified Gaussian) curve-fit for fused peak groups; `integrator` uses it for `--split-mode deconvolve` (fits N≥2 groups, falls back to `drop` on any fit failure; isolated peaks unchanged, so only fused-group `area_mV_min` differs)
 
