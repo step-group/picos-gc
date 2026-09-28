@@ -1,10 +1,12 @@
-"""Unit tests for the KF-anchored normalization + replicate-mismatch QC."""
+"""Unit tests for the KF-anchored normalization, the replicate screen and the transfer."""
 from __future__ import annotations
 
 import pytest
 
 pytest.importorskip("openpyxl")  # fill_ternarios imports openpyxl at module load
-from fill_ternarios import _replicate_mismatch, kf_anchor
+from types import SimpleNamespace
+
+from fill_ternarios import kf_anchor, replicate_screen, results_rows, transfer_factors
 
 
 def test_kf_anchor_identity_when_closed():
@@ -28,16 +30,50 @@ def test_kf_anchor_gc_zero_is_pure_water():
     assert kf_anchor(0.0, 0.0, 0.0, 0.04) == ([0.0, 0.0, 0.0, 1.0], 0.04)
 
 
-def test_replicate_mismatch_flags_uniform_dilution():
-    # D1 organic injections: 356 vs 2194 (and terpenes scale the same ~6.2x).
-    g = [{"L": 356.0, "M": 6.4, "N": 5.6}, {"L": 2193.9, "M": 39.0, "N": 34.8}]
-    assert _replicate_mismatch(g, 0.25, 0.005, 0.005) == pytest.approx(6.16, abs=0.1)
+def _v(s, a, b):
+    return {"s": s, "a": a, "b": b}
 
 
-def test_replicate_mismatch_ignores_trace_peak_wobble():
-    # aqueous phase: dominant 2PE fraction is below the constituent gate -> not evaluated.
-    g = [{"L": 44.3, "M": 0.0, "N": 0.0}, {"L": 11.1, "M": 0.0, "N": 0.0}]
-    assert _replicate_mismatch(g, 0.006, 0.0, 0.0) == 0.0
+def test_replicate_screen_names_the_failure():
+    # F3 organic: vial 10 reads 1.64x vial 9 in every component -- a weighing slip
+    assert replicate_screen([_v(0.30, 0.20, 0.20), _v(0.49, 0.33, 0.33)]) == "whole_vial"
+    # B1 aqueous: droplets carry the terpenes 4x and leave 2PE at 1.16x
+    assert replicate_screen([_v(0.02, 1e-4, 1e-4), _v(0.023, 4e-4, 4e-4)]) == (
+        "component_spread"
+    )
+    # clean pairs agree to a few % per vial; one vial, or a binary's zero 2PE, is no pair
+    assert replicate_screen([_v(0.02, 1e-4, 1e-4), _v(0.0205, 1.04e-4, 0.97e-4)]) == ""
+    assert replicate_screen([_v(0.02, 1e-4, 1e-4)]) == ""
+    assert replicate_screen([_v(0.0, 0.4, 0.4), _v(0.0, 0.41, 0.4)]) == ""
+
+
+class _Sheet(dict):
+    title = "Bloque Z"
+
+    def __getitem__(self, k):
+        return SimpleNamespace(value=self.get(k))
+
+
+def _rec(row, sysnum, ph, L, M, N, U=None):
+    return {"row": row, "sysnum": sysnum, "ph": ph, "phase": ph, "L": L, "M": M, "N": N,
+            "I": 0.2, "K": 1.0, "U": U, "V": None}  # fmt: skip
+
+
+def test_transfer_factor_is_the_organic_closure_and_corrects_the_aqueous_only():
+    ws = _Sheet(F2=100.0, G2=100.0, H2=100.0, F3=1.0, G3=1.0, H3=1.0, M3="Thymol", N3="Eugenol")
+    # DF = K/I = 5 and C = A/100 %, so g = A x 5e-4. Organic: G = 0.5 + 0.2 + 0.155 =
+    # 0.855 = 0.9 x (1 - 0.05 KF) -- a batch reading at phi = 0.9
+    org = [_rec(r, 1, "T", 1000.0, 400.0, 310.0, U=5.0) for r in (5, 6)]
+    aq = [_rec(r, 1, "B", 10.0, 0.5, 0.5) for r in (7, 8)]
+    phi = transfer_factors([(ws, org + aq)])
+    assert phi == {"Z1T1 AL Z5B2": pytest.approx(0.9)}
+    rows = {r[2]: r for r in results_rows(ws, "Z", org + aq, phi=phi)}
+    # aqueous 2PE: 10/100 % x DF 5 = 0.005, read 0.9 low -> 0.00556; water by difference
+    assert float(rows["Inferior"][3]) == pytest.approx(0.005 / 0.9, abs=1e-5)
+    assert float(rows["Inferior"][8]) == pytest.approx(1 - 0.0055 / 0.9, abs=1e-5)
+    # organic: phi cancels in the KF anchor
+    plain = {r[2]: r for r in results_rows(ws, "Z", org + aq)}
+    assert rows["Superior"][3:9] == plain["Superior"][3:9]
 
 
 def test_power_law_response_inverts_and_bends_below_linear():

@@ -27,7 +27,7 @@ from pathlib import Path
 
 import openpyxl
 
-from fill_ternarios import PURITY, calibration_points, canon
+from fill_ternarios import PURITY, batch_of, calibration_points, canon
 
 _ROOT = Path(__file__).resolve().parent
 WB = _ROOT / "Sistemas ternarios_MF_filled.xlsx"
@@ -79,6 +79,7 @@ def _rows(ws, block, rows, kind, n_rep, single=frozenset()):
                 "kind": kind,
                 "system": system,
                 "system_label_raw": ws[f"A{r}"].value,
+                "batch": batch_of(ws, r),
                 "phase_position": str(phase_position).strip(),
                 "vial": _num(ws, f"C{r}"),
                 "n_injections": 1 if (ws.title, r) in single else n_rep,

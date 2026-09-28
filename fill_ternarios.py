@@ -28,6 +28,7 @@ import csv
 import math
 import re
 import shutil
+import statistics
 import subprocess
 import tempfile
 from glob import glob
@@ -71,11 +72,15 @@ CODE_RE = re.compile(r"(\d+)[-_ ]?([TB])([12])\s*$", re.I)
 # Composition QC. KF water is an independent absolute assay, so anchor it and split
 # the GC remainder by ratio rather than normalising all four by their (often <1) sum
 # (that rescales the good water — the D1/I1 spurious-curve bug). Σ outside the band ⇒
-# mass didn't close; a dominant GC peak whose two replicate injections differ
-# >MISMATCH_MAX x (a uniform whole-sample dilution slip) ⇒ replicate_mismatch.
+# mass didn't close; two vials that disagree past the replicate screen ⇒ replicate_mismatch.
 CLOSURE_BAND = (0.5, 1.5)
-MISMATCH_MAX = 3.0
-MISMATCH_MIN_FRAC = 0.1  # only judge mismatch on a real constituent, not trace wobble
+# Replicate screen, on each vial's dilution-corrected fractions. Clean pairs agree to
+# 2.7 % (2PE) and ~4.5 % (terpenes) per vial (2026-09-28, 65 pairs). A whole-vial slip --
+# a weighing or transcription error -- moves every component together (F3: 1.64x);
+# organic droplets in an aqueous vial move the terpenes and leave 2PE (B1: 4x vs 1.16x).
+# The raw-area gate this replaces (3x on the dominant peak) passed all 13 such pairs.
+SCREEN_WHOLE_VIAL = 1.15  # geometric-mean vial ratio over the components, ~5 sigma
+SCREEN_SPREAD = 1.3  # max/min of the per-component vial ratios
 ORGANIC_WATER_MAX = 0.5  # KF anchor only the water-poor (organic) phase; see results_rows
 # Pure-water solubility at 30 °C, mass fraction (g/L / 1000), from the thesis
 # data/raw/solubility/water_terpene/measurements.csv: thymol, carvacrol, eugenol, geraniol
@@ -322,12 +327,13 @@ def binary_vials(ws, reps: tuple[int, int], g2, h2) -> list[dict]:
 
 
 def binary_endpoint(
-    vials: list[dict], terp_max: float
+    vials: list[dict], terp_max: float, phi: float = 1.0
 ) -> tuple[list[float] | None, float | None, str, list[str], list[dict]]:
     """One binary endpoint from its vials: ([HBA, HBD, water], closure, water_src, flags,
     kept). Same chain as the ternaries: cherry-pick via aqueous_keep, organic (water <
-    ORGANIC_WATER_MAX) KF-anchored, aqueous water by difference. Closure only means
-    something with a real KF, so it is None for by-difference aqueous endpoints."""
+    ORGANIC_WATER_MAX) KF-anchored, aqueous divided by its batch's *phi* (see
+    transfer_factors) with water by difference. Closure only means something with a real
+    KF, so it is None for by-difference aqueous endpoints."""
     kept = aqueous_keep(vials, terp_max)
     if not kept:
         return None, None, "", [], kept
@@ -342,10 +348,11 @@ def binary_endpoint(
         lo, hi = CLOSURE_BAND
         if not (lo <= closure <= hi):
             flags.append("low_closure")
-        if _replicate_mismatch([v["raw"] for v in kept], 0.0, a, b) > MISMATCH_MAX:
-            flags.append("replicate_mismatch")
     else:
-        x, y, z, closure, src = a, b, max(0.0, 1.0 - a - b), None, "bydiff"
+        x, y = a / phi, b / phi
+        z, closure, src = max(0.0, 1.0 - x - y), None, "bydiff"
+    if replicate_screen(kept):
+        flags.append("replicate_mismatch")
     return [x, y, z], closure, src, flags, kept
 
 
@@ -353,10 +360,11 @@ def _terp_a(v: dict) -> float:
     return v["a"] or 0.0
 
 
-def binary_tieline_rows(wb_d) -> list[list]:
+def binary_tieline_rows(wb_d, phi: dict[str, float] | None = None) -> list[list]:
     """Water-solvent binary endpoints, rows 25/26 and 27/28 of each sheet, computed from
-    the raw cells via binary_endpoint (HBA, HBD, water mass fractions; 2PE = 0). A pair
-    with no usable vial (no masses, no areas, or organic without KF) contributes nothing."""
+    the raw cells via binary_endpoint (HBA, HBD, water mass fractions; 2PE = 0), the
+    aqueous corrected by *phi* (transfer_factors) of its batch. A pair with no usable
+    vial (no masses, no areas, or organic without KF) contributes nothing."""
     out = []
     for sheet in wb_d.sheetnames:
         ws = wb_d[sheet]
@@ -368,7 +376,9 @@ def binary_tieline_rows(wb_d) -> list[list]:
         terp_max = aq_terpene_max(hba, hbd)
         for _row, reps in BIN_PAIRS:
             point, _closure, src, _flags, _kept = binary_endpoint(
-                binary_vials(ws, reps, g2, h2), terp_max
+                binary_vials(ws, reps, g2, h2),
+                terp_max,
+                (phi or {}).get(batch_of(ws, reps[0]), 1.0),
             )
             if point is None:
                 continue
@@ -500,21 +510,75 @@ def kf_anchor(sol: float, hba: float, hbd: float, water: float) -> tuple[list[fl
     return [sol * scale, hba * scale, hbd * scale, w], closure
 
 
-def _replicate_mismatch(g: list[dict], w, x, y) -> float:
-    """Max/min replicate area ratio of the phase's dominant GC component, gated to real
-    constituents (raw frac > MISMATCH_MIN_FRAC). A uniform whole-sample scale error
-    between the two injections (a dilution slip) shows here as a big ratio on the
-    dominant peak. 0.0 when not applicable."""
-    col, frac = max(
-        (("L", w), ("M", x), ("N", y)),
-        key=lambda cf: cf[1] if cf[1] is not None else -1.0,
-    )
-    if frac is None or frac <= MISMATCH_MIN_FRAC:
-        return 0.0
-    areas = [r[col] for r in g if r.get(col)]
-    if len(areas) < 2 or min(areas) <= 0:
-        return 0.0
-    return max(areas) / min(areas)
+def replicate_screen(vials: list[dict]) -> str:
+    """'' when a phase's two vials agree, else why not: 'whole_vial' (every component off
+    together) or 'component_spread'. Judged on vial_fractions, i.e. after each vial's own
+    dilution, so a vial that simply took more sample is not a mismatch."""
+    if len(vials) != 2:
+        return ""
+    lr = [
+        math.log(v2 / v1)
+        for v1, v2 in ((vials[0][k], vials[1][k]) for k in "sab")
+        if v1 and v2 and v1 > 0 and v2 > 0
+    ]
+    if not lr:
+        return ""
+    if max(lr) - min(lr) > math.log(SCREEN_SPREAD):  # first: it moves the mean too
+        return "component_spread"
+    if abs(sum(lr) / len(lr)) > math.log(SCREEN_WHOLE_VIAL):
+        return "whole_vial"
+    return ""
+
+
+# GC batch of a vial row. A batch is one instrument sequence, and it is what the response
+# transfer (transfer_factors) is a property of: the campaign-1 blocks ran Mar-Apr at
+# 2PE t_R 9.75 min, the May calibration and the September repeats at 10.7-10.85 min.
+# repeat_results.patch writes a patched row's batch here; an unwritten row is campaign 1.
+BATCH_COL = "AZ"
+BINARIES_BATCH = "BINARIOS_TERPENOS"
+
+
+def batch_of(ws, row: int) -> str:
+    if v := ws[f"{BATCH_COL}{row}"].value:
+        return str(v)
+    block = ws.title.split()[-1]
+    return BINARIES_BATCH if row >= 25 else f"{block}1T1 AL {block}5B2"
+
+
+def transfer_factors(sheets) -> dict[str, float]:
+    """{GC batch: phi} -- the batch's response relative to the May calibration (CC_MF),
+    the median over its clean organic endpoints of G/(1 - w_KF): an organic phase's true
+    non-water mass is 1 - KF, so the GC total G reads phi times it. The organic phase
+    needs no phi (it cancels in kf_anchor); the aqueous organics are divided by it
+    (results_rows, binary_endpoint). The median keeps one endpoint-level failure (H4 at
+    0.55) from moving its batch. *sheets*: (ws, recs) pairs, recs as fill_block returns.
+    A batch with no clean organic endpoint has no entry: its aqueous stays uncorrected.
+    """
+    by: dict[str, list[float]] = {}
+
+    def add(ws, row, use):
+        kf = [c for v in use for c in v["kf"]]
+        if not kf or sum(kf) / len(kf) >= ORGANIC_WATER_MAX or replicate_screen(use):
+            return
+        comps = [[v[k] for v in use] for k in "sab"]
+        if any(None in c for c in comps):
+            return
+        G = sum(sum(c) / len(c) for c in comps)
+        by.setdefault(batch_of(ws, row), []).append(G / (1 - sum(kf) / len(kf)))
+
+    for ws, recs in sheets:
+        f2, g2, h2 = response(ws, "F"), response(ws, "G"), response(ws, "H")
+        terp_max = aq_terpene_max(ws["M3"].value, ws["N3"].value)
+        groups: dict[tuple[int, str], list[dict]] = {}
+        for r in recs:
+            groups.setdefault((r["sysnum"], r["ph"]), []).append(r)
+        for g in groups.values():
+            vials = [v for r in g if (v := vial_fractions(r, f2, g2, h2)) is not None]
+            add(ws, g[0]["row"], aqueous_keep(vials, terp_max))
+        if ws["A25"].value == "Bin":
+            for _, reps in BIN_PAIRS:
+                add(ws, reps[0], aqueous_keep(binary_vials(ws, reps, g2, h2), terp_max))
+    return {b: statistics.median(v) for b, v in by.items()}
 
 
 def vial_fractions(r: dict, f2, g2, h2) -> dict | None:
@@ -556,12 +620,20 @@ def aqueous_keep(vials: list[dict], terp_max: float) -> list[dict]:
     return keep
 
 
-def results_rows(ws, block: str, recs: list[dict], aqueous_bydiff: bool = True) -> list[list]:
+def results_rows(
+    ws,
+    block: str,
+    recs: list[dict],
+    aqueous_bydiff: bool = True,
+    phi: dict[str, float] | None = None,
+) -> list[list]:
     """Replicate the sheet formula chain -> one normalized ternary point per (system, phase).
 
     Organic (water-poor) phases are always KF-anchored. Aqueous (water-rich) phases use
     water BY DIFFERENCE (`aqueous_bydiff=True`, default) or KF proportional normalisation
-    (`False`, legacy). The chosen source is emitted per row as `water_src` (kf|bydiff)."""
+    (`False`, legacy); by difference, their organics are first divided by *phi* of their
+    GC batch (transfer_factors; absent -> 1). The chosen source is emitted per row as
+    `water_src` (kf|bydiff)."""
     f2, g2, h2 = response(ws, "F"), response(ws, "G"), response(ws, "H")
     hba_name, hbd_name = ws["M3"].value, ws["N3"].value
     groups: dict[tuple[int, str], list[dict]] = {}
@@ -612,9 +684,11 @@ def results_rows(ws, block: str, recs: list[dict], aqueous_bydiff: bool = True) 
             elif aqueous_bydiff:
                 # Water-rich (aqueous) phase, water BY DIFFERENCE: water = 1 - Σ(organics).
                 # At ~0.95+ water the KF titration is unreliable, and water so dominates
-                # that it's insensitive to the method; the dissolved GC species stay as
+                # that it's insensitive to the method; the dissolved GC species are
+                # divided by their batch's response transfer and are otherwise as
                 # measured. `closure` (below) keeps the raw KF sum as a drift diagnostic.
-                norm = [w, x, y, max(0.0, 1.0 - (w + x + y))]
+                p = phi.get(batch_of(ws, g[0]["row"]), 1.0) if phi else 1.0
+                norm = [w / p, x / p, y / p, max(0.0, 1.0 - (w + x + y) / p)]
                 src = "bydiff"
             else:
                 # Water-rich phase, KF-normalised (legacy --aqueous-water kf).
@@ -626,7 +700,7 @@ def results_rows(ws, block: str, recs: list[dict], aqueous_bydiff: bool = True) 
                 closure = None
             elif not (lo <= closure <= hi):
                 flags.append("low_closure")
-            if _replicate_mismatch([v["raw"] for v in use], w, x, y) > MISMATCH_MAX:
+            if replicate_screen(use):
                 flags.append("replicate_mismatch")
             if dropped:
                 flags.append("dropped_replicate")
@@ -784,6 +858,7 @@ def main() -> None:
     all_rows: list[list] = []
     bin_areas = load_binary_areas(BINARIOS_CSV, warn)  # tie-line areas (rows 25-28)
 
+    filled = []  # (ws, block, recs): results_rows needs every batch's phi first
     for sheet in wb.sheetnames:
         ws = wb[sheet]
         block = sheet.split()[-1]  # "Bloque A" -> "A"
@@ -798,11 +873,15 @@ def main() -> None:
         areas = load_vial_areas(merged)
         recs = fill_block(ws, wb_d[sheet], block, areas, cc, priority, warn)
         fill_binary(ws, block, bin_areas, warn)  # Water-solvent tie-line M/N (rows 25-28)
-        all_rows += results_rows(ws, block, recs, aqueous_bydiff)
+        filled.append((ws, block, recs))
         print(
             f"Bloque {block}: filled {len(recs)}/20 vials "
             f"(HBA={ws['M3'].value}, HBD={ws['N3'].value}, 2PhEt α={_num(ws, 'F2')} β={_num(ws, 'F3')})"
         )
+    phi = transfer_factors([(ws, recs) for ws, _, recs in filled])
+    print("response transfer phi per GC batch:", {b: round(p, 3) for b, p in sorted(phi.items())})
+    for ws, block, recs in filled:
+        all_rows += results_rows(ws, block, recs, aqueous_bydiff, phi)
 
     write_formulas(wb)
     wb.save(WB_OUT)
@@ -831,7 +910,7 @@ def main() -> None:
     # Water-solvent binary tie-line endpoints (rows 25-28) for the plotter. Read from the
     # recalc'd file so the pre-wired AE/AF/AG formulas have cached values.
     wb_bin = openpyxl.load_workbook(WB_OUT, data_only=True)
-    bin_rows = binary_tieline_rows(wb_bin)
+    bin_rows = binary_tieline_rows(wb_bin, phi)
     with BIN_OUT_CSV.open("w", newline="") as fh:
         w = csv.writer(fh)
         w.writerow(["block", "phase", "HBA", "HBA_wt", "HBD", "HBD_wt", "water", "water_src"])

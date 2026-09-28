@@ -60,19 +60,32 @@ a green tie-line on the 2PE-free edge in all three views (`_experimental`, `_exp
 `_aqueous_log`). All 8 blocks resolve both endpoints (every aqueous one `bydiff`: no
 aqueous KF was measured).
 
+## Response transfer (per GC batch)
+The CC_MF calibration (13–14 May) is applied to sequences run in another column state: the
+campaign-1 blocks (Mar–Apr, 2PE t_R 9.75 min) read G/(1 − w_KF) = 0.81–1.08 on their organic
+endpoints, the May binaries 0.97, the September repeats (t_R 10.7, the calibration's state)
+0.996. `transfer_factors` takes each batch's median over its clean organic endpoints;
+`results_rows`, `binary_endpoint` and `two_pe_endpoint` divide the **aqueous** organics by it
+(it cancels in the organic KF anchor). The batch is the block's own sequence for campaign 1,
+`BINARIOS_TERPENOS` for the edges, and the round folder for a row `repeat_results.patch`
+overwrote (`BATCH_COL`, in-memory only). A batch with no clean organic endpoint (round 2) stays
+at 1. Evidence it is the instrument, not the sample: the 2PE-rich aqueous family read 7.5 %
+low in campaign-1 blocks against round-1 ones before the correction, +0.5 % after.
+
 ## Repeat audit
 `uv run audit_repeats.py` reads `Sistemas ternarios_MF_filled.xlsx` only (no `out/` needed)
 and writes `out/repeat_list.csv`: one row per (system, phase) point, ternary **and** binary,
 with a `repeat` verdict. Reasons: `missing_vials` (blank L/M/N = never injected),
 `low_closure`, `replicate_mismatch` (both via `fill_ternarios.results_rows`, so they match
-the pipeline), `aqueous_organics_suspect` (organic droplets in **every** kept aqueous vial: terpenes above
+the pipeline; the latter is `replicate_screen` — the two vials' dilution-corrected fractions
+off together by > `SCREEN_WHOLE_VIAL` (a weighing/transcription slip) or apart by >
+`SCREEN_SPREAD` (droplets), either phase; it replaced a 3x raw-area gate that passed all 13
+failed pairs, 2026-09-28), `aqueous_organics_suspect` (organic droplets in **every** kept aqueous vial: terpenes above
 the pair's summed pure-water solubility at 30 °C +20 % method tolerance, `AQ_SOLUBILITY_30C`
-× `AQ_SOLUBILITY_TOL` in `aq_terpene_max`, 2.8–4.9 g/L by pair) and `aqueous_replicate_mismatch` (kept aqueous
-vials' total organics differ > 3x with no droplet signature; the pipeline's
-`replicate_mismatch` is gated on a component > 10 % and never fires on aqueous phases) and
+× `AQ_SOLUBILITY_TOL` in `aq_terpene_max`, 2.8–4.9 g/L by pair) and
 `aqueous_2pe_outlier` (the 2PE-rich endpoint of every block is the same system — organic
 phase 87–89 % 2PE, ~8 % water in all eight — so their aqueous phases are one number
-measured once per block, 16–20 g/L in the five sound ones; `_2pe_outliers` flags a miss
+measured once per block, 21–27 g/L since the transfer correction; `_2pe_outliers` flags a miss
 of the median by > `AQ_2PE_OUTLIER`. It is a cross-block pass, the only rule that needs
 every sheet at once, and it cannot be an absolute literature bound: published 2PE
 solubility at 30 °C spans 21–33 g/L, wider than the disagreement) and

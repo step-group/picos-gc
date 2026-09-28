@@ -11,8 +11,7 @@ the pipeline's. Binary edge rows 25-28 get the same treatment (fill_ternarios'
 binary export carries no closure at all).
 
 Repeat reasons: missing_vials, low_closure, replicate_mismatch,
-aqueous_organics_suspect, aqueous_replicate_mismatch, aqueous_2pe_outlier,
-edge_ternary_mismatch. Informational only (in
+aqueous_organics_suspect, aqueous_2pe_outlier, edge_ternary_mismatch. Informational only (in
 `flags`, never a repeat): single_vial (one clean vial is accepted), dropped_replicate
 (the pipeline already cherry-picked the clean vial, see fill_ternarios.aqueous_keep),
 a single KF titration (n_kf).
@@ -20,13 +19,11 @@ a single KF titration (n_kf).
 aqueous_organics_suspect = organic-phase droplets in EVERY kept aqueous vial (terpenes
 HBA+HBD above the pair's summed pure-water solubility at 30 °C, see
 fill_ternarios.aq_terpene_max; nothing left to cherry-pick).
-aqueous_replicate_mismatch = the kept aqueous vials' total organics (2PE+HBA+HBD)
-differ > MISMATCH_MAX x without the terpene signature of droplets (a 2PE-only
-disagreement). The pipeline's replicate_mismatch is gated on a component > 10 %,
-which an aqueous phase never has, so it is blind there. ponytail: no cherry-pick
-here — the only reference would be the same tie-line's organic phase via the 2PE
-distribution coefficient (40-50 in every clean system), and the one current case
-(D1) has a broken organic phase; add that pick when a case with a sound one appears.
+replicate_mismatch = the kept vials of a phase fail fill_ternarios.replicate_screen
+(dilution-corrected: every component off together, or the components apart), in either
+phase; it replaced aqueous_replicate_mismatch, a 3x gate on total organics, 2026-09-28.
+ponytail: no cherry-pick here — which vial of a failed pair is right is not in the
+data; the repeat decides.
 aqueous_2pe_outlier = see _2pe_outliers.
 edge_ternary_mismatch = see _edge_vs_ternary.
 
@@ -44,7 +41,6 @@ import openpyxl
 from fill_ternarios import (
     BIN_PAIRS,
     BIN_TO_BLOCK,
-    MISMATCH_MAX,
     ORGANIC_WATER_MAX,
     _num,
     _terp,
@@ -52,9 +48,11 @@ from fill_ternarios import (
     aq_terpene_max,
     aqueous_keep,
     binary_endpoint,
+    batch_of,
     binary_vials,
     response,
     results_rows,
+    transfer_factors,
     vial_fractions,
 )
 
@@ -103,8 +101,6 @@ def _aqueous_organics(
     reasons = []
     if min(terp) > terp_max:  # every kept vial carries droplets: nothing to pick
         reasons.append("aqueous_organics_suspect")
-    elif ratio is not None and ratio > MISMATCH_MAX:  # 2PE-only disagreement
-        reasons.append("aqueous_replicate_mismatch")
     return max(terp), ratio, reasons
 
 
@@ -213,11 +209,11 @@ def ternary_recs(ws) -> list[dict]:
     return recs
 
 
-def _ternary(ws, block: str) -> list[dict]:
+def _ternary(ws, block: str, phi: dict[str, float]) -> list[dict]:
     groups = _groups(ws)
     recs = ternary_recs(ws)
     # results_rows: [block, system, phase, ..., closure(9), n_vials(10), flags(11), src(12)]
-    computed = {(r[1], r[2]): r for r in results_rows(ws, block, recs)}
+    computed = {(r[1], r[2]): r for r in results_rows(ws, block, recs, phi=phi)}
     f2, g2, h2 = response(ws, "F"), response(ws, "G"), response(ws, "H")
     terp_max = aq_terpene_max(ws["M3"].value, ws["N3"].value)
     out = []
@@ -258,7 +254,7 @@ def _ternary(ws, block: str) -> list[dict]:
     return out
 
 
-def _binary(ws, block: str) -> list[dict]:
+def _binary(ws, block: str, phi: dict[str, float]) -> list[dict]:
     if ws["A25"].value != "Bin":
         return []
     g2, h2 = response(ws, "G"), response(ws, "H")
@@ -269,7 +265,9 @@ def _binary(ws, block: str) -> list[dict]:
     out = []
     for _row, reps in BIN_PAIRS:
         vials = binary_vials(ws, reps, g2, h2)
-        point, closure, src, flags, kept = binary_endpoint(vials, terp_max)
+        point, closure, src, flags, kept = binary_endpoint(
+            vials, terp_max, phi.get(batch_of(ws, reps[0]), 1.0)
+        )
         all_kf = [c for v in vials for c in v["kf"]]
         terp, ratio, aq_reasons = _aqueous_organics(kept, all_kf, terp_max)
         have = [_num(ws, f"M{x}") is not None or _num(ws, f"N{x}") is not None for x in reps]
@@ -297,12 +295,18 @@ def _binary(ws, block: str) -> list[dict]:
     return out
 
 
+def transfer_of(wb) -> dict[str, float]:
+    """fill_ternarios.transfer_factors over every sheet of a data_only workbook."""
+    return transfer_factors([(wb[s], ternary_recs(wb[s])) for s in wb.sheetnames])
+
+
 def audit(wb) -> list[dict]:
     """All (system, phase) points of a data_only workbook, with a repeat verdict each."""
     rows = []
+    phi = transfer_of(wb)
     for sheet in wb.sheetnames:
         ws, block = wb[sheet], sheet.split()[-1]
-        rows += _ternary(ws, block) + _binary(ws, block)
+        rows += _ternary(ws, block, phi) + _binary(ws, block, phi)
     _2pe_outliers(rows)  # cross-block: needs every sheet's rows in hand
     _edge_vs_ternary(rows)  # cross-kind: pairs each binary edge with its own ternaries
     return rows

@@ -32,10 +32,11 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import openpyxl
 
-from audit_repeats import COLS, audit, ternary_recs
+from audit_repeats import COLS, audit, ternary_recs, transfer_of
 from export_vial_data import vial_rows
 from fill_ternarios import (
     _BIN_ROWS,
+    BATCH_COL,
     BIN_TO_BLOCK,
     ORGANIC_WATER_MAX,
     WB_OUT,
@@ -196,8 +197,9 @@ def _row_of(ws, tube: str, ph: str, rep: int) -> int:
     return next(r for r, s, p, k, _ in _vial_rows(ws) if (s, p, k) == (sysnum, ph, rep))
 
 
-def patch(wb, areas: dict, entry: dict, rows: set | None = None) -> list[str]:
-    """Overwrite each repeat vial's row (masses, KF, areas) in the data_only workbook.
+def patch(wb, areas: dict, entry: dict, rows: set | None = None, batch: str = "") -> list[str]:
+    """Overwrite each repeat vial's row (masses, KF, areas) in the data_only workbook, and
+    record its GC *batch* in fill_ternarios.BATCH_COL (the response transfer is per batch).
     Returns the tubes patched; *rows* collects the (sheet, row) cells overwritten. The
     2PE-water binary has no sheet; see two_pe_endpoint."""
     tubes = []
@@ -215,6 +217,7 @@ def patch(wb, areas: dict, entry: dict, rows: set | None = None) -> list[str]:
             rows.add((ws.title, r))
         for col, v in cells.items():
             ws[f"{col}{r}"] = v
+        ws[f"{BATCH_COL}{r}"] = batch
         ws[f"L{r}"] = None if tube.startswith("BIN") else a.get("2pe")
         ws[f"M{r}"] = a.get(canon(ws["M3"].value))
         ws[f"N{r}"] = a.get(canon(ws["N3"].value))
@@ -223,9 +226,10 @@ def patch(wb, areas: dict, entry: dict, rows: set | None = None) -> list[str]:
     return tubes
 
 
-def two_pe_endpoint(areas: dict, entry: dict, f2) -> list[dict]:
+def two_pe_endpoint(areas: dict, entry: dict, f2, phi: float = 1.0) -> list[dict]:
     """The water-2PE binary: organic 2PE = 1 - KF (nothing else in it), aqueous 2PE from
-    the GC, water by difference. Same arithmetic as fill_ternarios.vial_fractions."""
+    the GC over its batch's response transfer *phi*, water by difference. Same arithmetic
+    as fill_ternarios.vial_fractions and results_rows."""
     org = [c / 100 for k, e in entry.items() if k.startswith("2PE-") for c in (e["U"], e["V"])
            if c is not None]  # fmt: skip
     aq = [
@@ -238,7 +242,7 @@ def two_pe_endpoint(areas: dict, entry: dict, f2) -> list[dict]:
         w = sum(org) / len(org)
         out.append(_pt("2PE", "2PE-bin", "organic", 1 - w, 0.0, 0.0, w, "kf"))
     if aq:
-        s = sum(aq) / len(aq)
+        s = sum(aq) / len(aq) / phi
         out.append(_pt("2PE", "2PE-bin", "aqueous", s, 0.0, 0.0, 1 - s, "bydiff"))
     return out
 
@@ -251,14 +255,14 @@ def _pt(block, system, phase, s, a, b, w, src, hba="", hbd="", closure="", flags
 
 def tielines(wb) -> list[dict]:
     """Every point of a data_only workbook through fill_ternarios' chain, as dicts."""
-    out = []
+    out, phi = [], transfer_of(wb)
     for sheet in wb.sheetnames:
         ws, block = wb[sheet], sheet.split()[-1]
-        for r in results_rows(ws, block, ternary_recs(ws)):
+        for r in results_rows(ws, block, ternary_recs(ws), phi=phi):
             if r[3]:
                 out.append(_pt(r[0], r[1], r[2], *(float(r[i]) for i in (3, 5, 7, 8)), r[12],
                                r[4], r[6], r[9], r[11]))  # fmt: skip
-    for b, phase, hba, x, hbd, y, z, src in binary_tieline_rows(wb):
+    for b, phase, hba, x, hbd, y, z, src in binary_tieline_rows(wb, phi):
         out.append(_pt(b, f"{b}-bin", phase, 0.0, float(x), float(y), float(z), src, hba, hbd))
     return out
 
@@ -353,10 +357,10 @@ def export(wb, tern_csv: Path, bin_csv: Path) -> None:
     """The workbook's tie-lines in fill_ternarios' own export formats (the files TESIS
     copies verbatim into data/raw/lle_ternary/), TENTATIVE points flagged. The binary
     file gains a trailing `flags` column, the only way its tie-lines can carry one."""
-    rows = []
+    rows, phi = [], transfer_of(wb)
     for sheet in wb.sheetnames:
         ws, block = wb[sheet], sheet.split()[-1]
-        rows += results_rows(ws, block, ternary_recs(ws))
+        rows += results_rows(ws, block, ternary_recs(ws), phi=phi)
     with tern_csv.open("w", newline="") as fh:
         w = csv.writer(fh)
         w.writerow(TERN_HEAD)
@@ -364,27 +368,34 @@ def export(wb, tern_csv: Path, bin_csv: Path) -> None:
     with bin_csv.open("w", newline="") as fh:
         w = csv.writer(fh)
         w.writerow(BIN_HEAD)
-        w.writerows(r + [_flag("", f"{r[0]}-bin")] for r in binary_tieline_rows(wb))
+        w.writerows(r + [_flag("", f"{r[0]}-bin")] for r in binary_tieline_rows(wb, phi))
 
 
 def patched(rounds: list[tuple[dict, dict]]) -> tuple[openpyxl.Workbook, list[str], set]:
     """The filled workbook with each round patched over it in order; the tubes of the last,
     and every (sheet, row) any round overwrote."""
     wb, tubes, rows = openpyxl.load_workbook(WB_OUT, data_only=True), [], set()
-    for areas, entry in rounds:
-        tubes = patch(wb, areas, entry, rows)
+    for batch, areas, entry in rounds:
+        tubes = patch(wb, areas, entry, rows, batch)
     return wb, tubes, rows
 
 
 def main() -> None:
-    rounds = [(integrate(batch), read_entry(entry)) for batch, entry in ROUNDS]
+    rounds = [(batch.name, integrate(batch), read_entry(entry)) for batch, entry in ROUNDS]
     wb_old, _, _ = patched(rounds[:-1])
     wb_new, tubes, new_rows = patched(rounds)
     systems = {_system(t) for t in tubes}
     old, new = tielines(wb_old), tielines(wb_new)
-    areas = {k: v for a, _ in rounds for k, v in a.items()}
-    entry = {k: v for _, e in rounds for k, v in e.items()}
-    two_pe = two_pe_endpoint(areas, entry, cc_mf_models(CC_MF)["2pe"])
+    areas = {k: v for _, a, _ in rounds for k, v in a.items()}
+    entry = {k: v for _, _, e in rounds for k, v in e.items()}
+    phi = transfer_of(wb_new)
+    print("response transfer phi per GC batch:", {b: round(p, 3) for b, p in sorted(phi.items())})
+    # the last round that injected the water-2PE tube is the one its values come from
+    two_pe_batch = next(
+        (b for b, a, e in reversed(rounds) if any(k.startswith("2PE-") and k in a for k in e)),
+        "",
+    )
+    two_pe = two_pe_endpoint(areas, entry, cc_mf_models(CC_MF)["2pe"], phi.get(two_pe_batch, 1.0))
 
     last = f"round {len(ROUNDS)}"
     rows = [{"campaign": "before", **p} for p in old if p["system"] in systems]

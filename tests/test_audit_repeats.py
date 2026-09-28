@@ -69,8 +69,8 @@ def test_verdicts():
     # both vials contaminated: nothing to pick
     assert by[("Z4", "Superior")]["reason"] == "aqueous_organics_suspect"
     assert by[("Z4", "Superior")]["dropped"] == ""
-    # 2PE-only disagreement (5x), no droplet signature
-    assert by[("Z4", "Inferior")]["reason"] == "aqueous_replicate_mismatch"
+    # 2PE-only disagreement (5x): the replicate screen's component spread
+    assert by[("Z4", "Inferior")]["reason"] == "replicate_mismatch"
     assert by[("Z4", "Inferior")]["aq_organics_ratio"] == "4.20"
     # binary edge: organic endpoint closes (0.47+0.47+0.03), aqueous cherry-picks B1
     org, aq = by[("Z-bin", "organic")], by[("Z-bin", "aqueous")]
