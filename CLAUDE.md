@@ -132,6 +132,6 @@ KF-less mostly-water phase as by-difference with a blank closure (`binary_vials`
 Rounds stack in `ROUNDS` order (round 2 = `REPETICIONES_26SEP2026` + `out/repeat2_entry.xlsx`,
 aqueous vials only): "old" is every round but the last, the export carries all of them;
 `ALIAS` maps round 2's phase-less `BIN6_1/2` to `BIN6_B1/B2`.
-Round 3 (prepared 2026-09-28, both phases, fresh organic KF): `--round 3 B5 BIN2` -- the
+Round 3 (prepared 2026-09-28, both phases, fresh organic KF): `--round 3 B5 BIN2` (entry sheet: `B5 BIN2 2PE`, the water-2PE binary re-measured too, hand-prepared, not in the prep book) -- the
 two campaign-1 points round 2 left above block B's trend; `TENTATIVE` holds them until it
 lands, then append its `(batch, out/repeat3_entry.xlsx)` to `ROUNDS`.
