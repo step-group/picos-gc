@@ -399,7 +399,7 @@ def main() -> None:
     print(f"\n{'point':<9}{'phase':<10}{'before':<50}after")
     for r in after:
         b = before.get((r["system"], r["phase"]))
-        if r["system"] in systems or (b and b["repeat"] == "yes"):
+        if r["system"] in systems or r["repeat"] == "yes" or (b and b["repeat"] == "yes"):
             was = b["reason"] or "ok" if b else "(no point)"
             print(f"{r['system']:<9}{r['phase']:<10}{was:<50}{r['reason'] or 'ok'}")
 
