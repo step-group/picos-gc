@@ -128,3 +128,18 @@ def test_aqueous_only_tubes_are_split_off_their_suffix():
     from make_repeat_workbook import split_aq
 
     assert split_aq({"A1", "B2:aq", "BIN6:aq"}) == ({"A1", "B2", "BIN6"}, {"B2", "BIN6"})
+
+
+def test_the_water_2pe_binary_gets_a_tube_row_and_its_own_vial_block():
+    wb = openpyxl.load_workbook(SRC)
+    trim(wb, {"B5", "BIN2", "2PE"})
+    lab = wb["Lab_DES"]
+    visible = [lab[f"A{r}"].value for r in range(10, 68) if not lab.row_dimensions[r].hidden]
+    assert visible == ["B5", "#", "BIN2", "2PE"]
+    dd = wb["datos_des"]  # no DES for the 2PE tube: BIN2's Falcon only
+    assert [dd[f"B{r}"].value for r in range(30, 33)] == ["ThyGer (BIN2)", None, None]
+    ws = wb["Sampling"]
+    codes = [ws[f"D{r}"].value for r in range(1, ws.max_row + 1) if not ws.row_dimensions[r].hidden]
+    assert codes[-4:] == ["2PE-T1", "2PE-T2", "2PE-B1", "2PE-B2"]
+    r = next(r for r in range(1, ws.max_row + 1) if ws[f"D{r}"].value == "2PE-T1")
+    assert ws[f"H{r}"].value == f'=IF(OR(E{r}="",F{r}=""),"",F{r}-E{r})'  # re-pointed

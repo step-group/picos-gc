@@ -38,7 +38,11 @@ SRC = _ROOT / "aromas_equilibrios_vfinal.xlsx"
 LIST = _ROOT / "out" / "repeat_list.csv"
 OUT = _ROOT / "out" / "aromas_equilibrios_repeat.xlsx"
 _FEED_REF = re.compile(r"'2-phenylethanol_DES'!I(\d+)")
-LAB_ROWS, LAB_BIN_HEADER = range(10, 67), 58
+LAB_ROWS, LAB_BIN_HEADER = range(10, 68), 58
+# The water-2PE binary has no row in the lab workbook: it is written into the empty row
+# under BIN8, styled like it, with 2PE where a binary puts its DES (so "W + DES" reads
+# "W + 2PE"). Guide volumes are the binaries' 4 + 4 mL.
+TWO_PE, LAB_2PE_ROW = "2PE", 67
 # Lab_DES weighing/record columns (W_tubo ... w_DES) and their "Anotar"/"Record on balance"
 # labels: the feed is only a guide to land in the two-phase region, the results come from
 # the sampled phases, so nothing is recorded there. Only the volume guide A-I stays.
@@ -228,21 +232,22 @@ def _sampling(wb, tubes: set[str], lab, keep_lab: set[int], aq_only=frozenset())
     after the binaries, titled from Lab_DES, with the row formulas re-pointed."""
     ws = _copy_sheet(openpyxl.load_workbook(SAMPLING_SRC)["Sampling"], wb, "Sampling")
     last = ws.max_row
-    keep, header, found, tpl = set(), set(), set(), None
+    keep, header, found, tpl, bin_head = set(), set(), set(), None, None
     for r in range(1, last + 1):
         a = ws[f"A{r}"].value
         if isinstance(a, str) and (_BLOCK_TITLE.match(a) or a.startswith("BINARIOS")):
             header = {r, r + 1, r + 2}
             tpl = r if _BLOCK_TITLE.match(a) else tpl
+            bin_head = r if a.startswith("BINARIOS") else bin_head
         elif a in tubes:
             keep |= header | set(range(r, r + 4))
             found.add(a)
     _hide(ws, range(1, last + 1), keep)
-    missing = sorted(tubes - found)
+    missing = sorted(tubes - found - {TWO_PE})
     if bins := [t for t in missing if t.startswith("BIN")]:
         raise ValueError(f"Sampling: no rows for {bins}")
     row = last + 2
-    if missing:
+    if missing or TWO_PE in tubes:
         ws.row_dimensions[last + 1].hidden = True  # spacer: belongs to no block
     for _letter, group in groupby(missing, key=lambda t: t[0]):
         codes = list(group)
@@ -261,6 +266,8 @@ def _sampling(wb, tubes: set[str], lab, keep_lab: set[int], aq_only=frozenset())
                 for c in "HIJ":
                     ws[f"{c}{row}"] = re.sub(rf"(?<=[A-L]){src}\b", str(row), ws[f"{c}{src}"].value)
                 row += 1
+    if TWO_PE in tubes:
+        row = _two_pe_sampling(ws, row, bin_head + 3, bin_head)
     for r in range(1, ws.max_row + 1):  # ternary block titles (cloned ones included)
         if isinstance(ws[f"A{r}"].value, str) and _BLOCK_TITLE.match(ws[f"A{r}"].value):
             ws[f"I{r}"], ws[f"K{r}"] = str(SAMPLE_UL), f"+{IPA_UL} µL IPA"
@@ -293,8 +300,36 @@ def _sampling(wb, tubes: set[str], lab, keep_lab: set[int], aq_only=frozenset())
     _paginate(ws)
 
 
+def _two_pe_lab_row(lab) -> None:
+    _copy_row(lab, LAB_2PE_ROW - 1, LAB_2PE_ROW, ncols=10)
+    for c, v in zip("ABCDEF", (TWO_PE, "2PE (sin DES)", "2-PE", "Agua", 4, 4)):
+        lab[f"{c}{LAB_2PE_ROW}"] = v
+
+
+def _two_pe_sampling(ws, row: int, tpl: int, head: int) -> int:
+    """The water-2PE binary's vial rows at `row`: the binaries' header (`head`, 3 rows)
+    retitled, then BIN1's four vial rows (`tpl`) re-coded 2PE-T1 ... 2PE-B2. Its organic
+    phase is ORGANIC_OVERRIDE's. Returns the next free row."""
+    for i in range(3):
+        _copy_row(ws, head + i, row + i)
+    ws[f"A{row}"] = "BINARIOS 2-PHENYLETHANOL CON AGUA"
+    row += 3
+    for j, tag in enumerate(("T1", "T2", "B1", "B2")):
+        _copy_row(ws, tpl + j, row)
+        ws[f"A{row}"] = TWO_PE if j == 0 else None
+        ws[f"D{row}"] = f"{TWO_PE}-{tag}"
+        for c in "HIJ":
+            ws[f"{c}{row}"] = re.sub(rf"(?<=[A-L]){tpl + j}\b", str(row), ws[f"{c}{tpl + j}"].value)
+        row += 1
+    org = {"T": "Top", "B": "Bottom"}[ORGANIC_OVERRIDE[TWO_PE]]
+    ws[f"L{row - 4}"] = f"Organic phase = {org} (KF there); flip if it floats"
+    return row
+
+
 def trim(wb, tubes: set[str], aq_only: set[str] = frozenset()) -> None:
     lab = wb["Lab_DES"]
+    if TWO_PE in tubes:
+        _two_pe_lab_row(lab)
     known = {lab[f"A{r}"].value for r in LAB_ROWS}
     if missing := tubes - known:
         raise ValueError(f"not in Lab_DES: {sorted(missing)}")
@@ -302,7 +337,7 @@ def trim(wb, tubes: set[str], aq_only: set[str] = frozenset()) -> None:
     for r in keep_lab:
         _backfill(lab, r)
         lab[f"B{r}"].value = DES_TYPOS.get(lab[f"B{r}"].value, lab[f"B{r}"].value)
-    has_bin = any(t.startswith("BIN") for t in tubes)
+    has_bin = any(t.startswith(("BIN", TWO_PE)) for t in tubes)
     _hide(lab, LAB_ROWS, keep_lab | ({LAB_BIN_HEADER} if has_bin else set()))
     for col in LAB_RECORD_COLS:
         lab.column_dimensions[col].hidden = True
@@ -313,7 +348,11 @@ def trim(wb, tubes: set[str], aq_only: set[str] = frozenset()) -> None:
     _des_table(
         wb["datos_des"],
         {lab[f"B{r}"].value for r in keep_lab if r < LAB_BIN_HEADER},
-        [(lab[f"A{r}"].value, lab[f"B{r}"].value) for r in sorted(keep_lab) if r > LAB_BIN_HEADER],
+        [
+            (lab[f"A{r}"].value, lab[f"B{r}"].value)
+            for r in sorted(keep_lab)
+            if LAB_BIN_HEADER < r != LAB_2PE_ROW  # no DES to prepare
+        ],
     )
     for sheet in HIDE_SHEETS:
         wb[sheet].sheet_state = "hidden"
@@ -426,7 +465,7 @@ def main() -> None:
     out.parent.mkdir(parents=True, exist_ok=True)
     wb.save(out)
     order = sorted(tubes, key=lambda t: (t.startswith("BIN"), t))
-    n_vials = sum(2 if t in aq_only else 4 for t in tubes if not t.startswith("BIN"))
+    n_vials = sum(2 if t in aq_only else 4 for t in tubes if not t.startswith(("BIN", TWO_PE)))
     print(f"{len(tubes)} tubes: {' '.join(order)}; {n_vials} ternary GC vials. Wrote {out}")
     if aq_only:
         print(f"aqueous phase only: {' '.join(sorted(aq_only))}")
