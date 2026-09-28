@@ -129,3 +129,6 @@ has no standards). The water–2PE binary has no sheet: organic 2PE = 1 − KF, 
 GC. Writes `out/repeat_tielines.csv` (old vs new per repeated tube), `out/repeat_list_after.csv`,
 `out/repeat_compare/<block>.png`. Repeat aqueous vials carry no KF, so `results_rows` takes a
 KF-less mostly-water phase as by-difference with a blank closure (`binary_vials`' rule).
+Rounds stack in `ROUNDS` order (round 2 = `REPETICIONES_26SEP2026` + `out/repeat2_entry.xlsx`,
+aqueous vials only): "old" is every round but the last, the export carries all of them;
+`ALIAS` maps round 2's phase-less `BIN6_1/2` to `BIN6_B1/B2`.

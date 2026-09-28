@@ -1,4 +1,5 @@
-"""Repeat campaign (REPETICIONES_22SEP2026) -> mass fractions, old vs new tie-lines.
+"""Repeat campaign (REPETICIONES_22SEP2026, then round 2 REPETICIONES_26SEP2026) -> mass
+fractions, old vs new tie-lines.
 
 The batch ran on a new 17-min method and mixes every block in one folder, so it gets
 its own fixed retention-time map keyed on the sample-name prefix (C4_T1 -> block C,
@@ -8,10 +9,12 @@ campaign-1 vials of the same tubes in an in-memory copy of the filled workbook; 
 re-equilibrated tube is a new tie-line, so all its vials are replaced, both phases.
 fill_ternarios' own chain then gives the tie-lines (slopes: CC_MF, the May
 calibration) and audit_repeats re-judges them. The master workbooks are not written.
+Rounds stack in ROUNDS order: "old" is campaign 1 with every round but the last, "new"
+adds the last, and the export carries every round.
 
 Run from the repo root: uv run python repeat_results.py
-  -> out/REPETICIONES_22SEP2026/{areas.csv, <sample>_labeled.png}
-     out/repeat_tielines.csv   old (campaign 1) and new points of every repeated tube
+  -> out/<batch>/{areas.csv, <sample>_labeled.png}   one folder per round
+     out/repeat_tielines.csv   before and after the last round, its tubes only
      out/repeat_list_after.csv audit_repeats verdicts with the repeats in
      out/repeat_compare/<block>.png
      out/{ternarios_resultados,binarios_tielines}_repeat.csv  every tie-line, repeats in,
@@ -54,8 +57,12 @@ from picos_gc.detector import detect_peaks
 from picos_gc.integrator import integrate_all_peaks
 
 _ROOT = Path(__file__).resolve().parent
-BATCH = _ROOT / "FLECK_TERPENOS2026" / "REPETICIONES_22SEP2026"
-ENTRY = _ROOT / "out" / "repeat_entry.xlsx"
+ROUNDS = [  # (GC batch, typed entry sheet), in the order they were measured
+    (_ROOT / "FLECK_TERPENOS2026" / "REPETICIONES_22SEP2026", _ROOT / "out" / "repeat_entry.xlsx"),
+    (_ROOT / "FLECK_TERPENOS2026" / "REPETICIONES_26SEP2026", _ROOT / "out" / "repeat2_entry.xlsx"),
+]
+# Round 2's operator named the F edge's aqueous vials without the phase letter.
+ALIAS = {"BIN6_1": "BIN6_B1", "BIN6_2": "BIN6_B2"}
 CC_MF = _ROOT / "CC_MF.xlsx"
 OUT = _ROOT / "out"
 
@@ -64,7 +71,8 @@ OUT = _ROOT / "out"
 REPEAT_TR = {
     "DL-Camphor": 8.45,
     "L-Carvone": 9.67,
-    "2PE": 10.72,
+    "Geraniol": 9.82,  # round 2, no standard: block B's only peak between IPA and 2PE,
+    "2PE": 10.72,  # after carvone as on the campaign-1 method (8.94 -> 9.17)
     "Thymol": 13.39,
     "Eugenol": 13.79,  # drifts 13.69-13.89 with load; never shares a block with thymol's
     "Carvacrol": 14.03,  # neighbour carvacrol, and D's thymol sits 0.3 min below it
@@ -72,6 +80,7 @@ REPEAT_TR = {
 RT_TOL = 0.25
 BLOCK_TERPS = {  # label_terpenos.BATCH_TERPENES, keyed on the block letter
     "A": ("L-Carvone", "Thymol"),
+    "B": ("Geraniol", "Thymol"),
     "C": ("Thymol", "Carvacrol"),
     "D": ("Thymol", "Eugenol"),
     "E": ("DL-Camphor", "Thymol"),
@@ -126,19 +135,19 @@ def classify_repeat(peaks, names) -> list[tuple[str, object]]:
     return out
 
 
-def integrate() -> dict[str, dict[str, float]]:
-    """{vial code: {canon compound: area}} for the batch; writes areas.csv + PNGs."""
-    out_dir = OUT / BATCH.name
+def integrate(batch: Path) -> dict[str, dict[str, float]]:
+    """{vial code: {canon compound: area}} for one batch; writes areas.csv + PNGs."""
+    out_dir = OUT / batch.name
     if out_dir.exists():
         shutil.rmtree(out_dir)
     out_dir.mkdir(parents=True)
     areas, rows = {}, []
-    for fp in sorted(BATCH.glob("*.gcd")):
+    for fp in sorted(batch.glob("*.gcd")):
         ch = load_chrom(fp)
         name = sample_label(ch)
         if name == "BLANK":
             continue
-        tube, ph, rep = parse_code(name)
+        tube, ph, rep = parse_code(ALIAS.get(name, name))
         code = f"{tube}-{ph}{rep}"  # the entry sheet's spelling
         names = compounds(tube)
         assigns = classify_repeat(integrate_all_peaks(ch, detect_peaks(ch, PARAMS)), names)
@@ -164,7 +173,7 @@ def integrate() -> dict[str, dict[str, float]]:
     return areas
 
 
-def read_entry(path: Path = ENTRY) -> dict[str, dict[str, float | None]]:
+def read_entry(path: Path) -> dict[str, dict[str, float | None]]:
     """{vial code: master-column values} from the typed entry sheet (row 9 on):
     E/G/I masses -> D/F/H, M/N KF -> U/V. A vial never weighed (2PE-B1/B2: KF only) gets
     None masses."""
@@ -290,12 +299,12 @@ def plot_block(block, old, new, failed, two_pe, path):
 
     for s, ps in _pairs(old).items():
         if s in failed:
-            draw(ps, {"color": "tab:red", "ls": "--", "marker": "x", "lw": 1}, "campaign 1, failed")
+            draw(ps, {"color": "tab:red", "ls": "--", "marker": "x", "lw": 1}, "before, failed")
         elif s not in {p["system"] for p in new}:
-            draw(ps, {"color": "0.6", "ls": "-", "marker": "o", "ms": 3, "lw": 0.8}, "campaign 1")
+            draw(ps, {"color": "0.6", "ls": "-", "marker": "o", "ms": 3, "lw": 0.8}, "before")
         else:
             draw(ps, {"color": "tab:orange", "ls": "--", "marker": "x", "lw": 1},
-                 "campaign 1, re-run")  # fmt: skip
+                 "before, re-run")  # fmt: skip
     for ps in _pairs(new).values():
         draw(ps, {"color": "tab:blue", "ls": "-", "marker": "o", "ms": 4, "lw": 1.4}, "repeat")
     if len(two_pe) == 2:
@@ -322,8 +331,9 @@ FIELDS = ["campaign", "block", "system", "phase", "w_2pe", "hba", "w_hba", "hbd"
 # A1 and A4 sit 3x above the binary. Taken back out the same day, final as they stand:
 # the A edge (BIN1, its round-1 repeat is good), A2, A3, I4 and the I edge. Exported with
 # a `tentative` flag -- on the whole tie-line, since a tie-line is drawn whole -- so they
-# draw as suspect until round 2 replaces them; empty this set when it lands.
-TENTATIVE = {"A1", "A4", "A5", "F5", "I2", "B2", "B3", "B4", "F-bin"}
+# draw as suspect until round 2 replaces them. Round 2 landed (REPETICIONES_26SEP2026):
+# emptied; put back a point the user still judges wrong after it.
+TENTATIVE: set[str] = set()
 TERN_HEAD = ["block", "system", "phase", "solute_2phet", "HBA", "HBA_wt", "HBD", "HBD_wt",
              "water", "closure", "n_vials", "flags", "water_src"]  # fmt: skip
 BIN_HEAD = ["block", "phase", "HBA", "HBA_wt", "HBD", "HBD_wt", "water", "water_src", "flags"]
@@ -351,19 +361,28 @@ def export(wb, tern_csv: Path, bin_csv: Path) -> None:
         w.writerows(r + [_flag("", f"{r[0]}-bin")] for r in binary_tieline_rows(wb))
 
 
+def patched(rounds: list[tuple[dict, dict]]) -> tuple[openpyxl.Workbook, list[str]]:
+    """The filled workbook with each round patched over it in order; the tubes of the last."""
+    wb, tubes = openpyxl.load_workbook(WB_OUT, data_only=True), []
+    for areas, entry in rounds:
+        tubes = patch(wb, areas, entry)
+    return wb, tubes
+
+
 def main() -> None:
-    areas = integrate()
-    entry = read_entry()
-    wb_old = openpyxl.load_workbook(WB_OUT, data_only=True)
-    wb_new = openpyxl.load_workbook(WB_OUT, data_only=True)
-    tubes = patch(wb_new, areas, entry)
+    rounds = [(integrate(batch), read_entry(entry)) for batch, entry in ROUNDS]
+    wb_old, _ = patched(rounds[:-1])
+    wb_new, tubes = patched(rounds)
     systems = {_system(t) for t in tubes}
     old, new = tielines(wb_old), tielines(wb_new)
+    areas = {k: v for a, _ in rounds for k, v in a.items()}
+    entry = {k: v for _, e in rounds for k, v in e.items()}
     two_pe = two_pe_endpoint(areas, entry, cc_mf_slopes(CC_MF)["2pe"])
 
-    rows = [{"campaign": "1", **p} for p in old if p["system"] in systems]
-    rows += [{"campaign": "repeat", **p} for p in new if p["system"] in systems]
-    rows += [{"campaign": "repeat", **p} for p in two_pe]
+    last = f"round {len(ROUNDS)}"
+    rows = [{"campaign": "before", **p} for p in old if p["system"] in systems]
+    rows += [{"campaign": last, **p} for p in new if p["system"] in systems]
+    rows += [{"campaign": "round 1", **p} for p in two_pe]
     rows.sort(key=lambda r: (r["system"], r["phase"], r["campaign"]))
     with (OUT / "repeat_tielines.csv").open("w", newline="") as fh:
         w = csv.DictWriter(fh, fieldnames=FIELDS)

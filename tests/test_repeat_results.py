@@ -4,6 +4,7 @@ import pytest
 
 from fill_ternarios import results_rows
 from repeat_results import (
+    ALIAS,
     block_of,
     classify_repeat,
     compounds,
@@ -15,6 +16,7 @@ from repeat_results import (
 def test_vial_codes_map_to_block_and_compounds():
     assert parse_code("C4_T1") == ("C4", "T", 1)
     assert parse_code("BIN3-B2") == ("BIN3", "B", 2)
+    assert parse_code(ALIAS["BIN6_2"]) == ("BIN6", "B", 2)  # round 2's phase-less name
     assert block_of("BIN1") == "A" and block_of("BIN3") == "C" and block_of("D2") == "D"
     assert compounds("D1") == ("2PE", "Thymol", "Eugenol")
     assert compounds("BIN1") == ("L-Carvone", "Thymol")  # the edge carries no 2PE
