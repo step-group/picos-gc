@@ -24,6 +24,13 @@ reads that CSV and joins to `Sistemas ternarios_MF.xlsx` rows via
 The sample name is the join key, so it must be the real embedded name, not the
 opaque `BATCH..._NNN.gcd` filename.
 
+The CC_MF standards are integrated the same way (`process_calibration` →
+`out/AaCALIBRACION_TERPENOS/areas.csv`; `CAM3` = camphor E3, `CAM-SM` = stock), and
+`fill_ternarios.calibration_points` joins those areas to CC_MF's %m/m. CC_MF's own col O
+was integrated by hand and misses its chromatograms by up to 7 %, so it is not read. The
+standards skip the global arPLS baseline, which clips their tails (up to 9 %) while
+leaving every sample peak above 30 mV·min within 0.4 %.
+
 Per-phase water source (`--aqueous-water`, default `difference`): **organic** (water-poor)
 phases are KF-anchored; **aqueous** (water-rich) phases take water **by difference**
 (`1−Σ organics`, KF used only to classify + as the `closure` QC diagnostic) — KF is

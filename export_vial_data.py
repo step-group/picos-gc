@@ -27,7 +27,7 @@ from pathlib import Path
 
 import openpyxl
 
-from fill_ternarios import PURITY, canon
+from fill_ternarios import PURITY, calibration_points, canon
 
 _ROOT = Path(__file__).resolve().parent
 WB = _ROOT / "Sistemas ternarios_MF_filled.xlsx"
@@ -113,23 +113,15 @@ def vial_rows(wb=None, single=frozenset()):
 
 
 def calibration_rows():
-    """Every (%m/m, area) standard in cols N/O -- the SM stock point plus E1..E5.
+    """Every standard -- the SM stock point plus E1..E5 -- as fill_ternarios.calibration_points.
 
-    Same selection fill_ternarios.cc_mf_models fits its power law over, so a fit of
+    The points fill_ternarios.cc_mf_models fits its power law over, so a fit of
     ln(area) on ln(w_pct_m_m * purity) from this CSV reproduces the workbook's alpha, beta.
     """
-    wb = openpyxl.load_workbook(CC, data_only=True)
-    rows = []
-    for ws in wb.worksheets:
-        n = 0
-        for r in ws.iter_rows(values_only=True):
-            if len(r) > 14 and isinstance(r[13], (int, float)) and isinstance(r[14], (int, float)):
-                rows.append(
-                    {"compound": ws.title, "standard": n, "w_pct_m_m": r[13], "area": r[14],
-                     "purity": PURITY[canon(ws.title)]}  # fmt: skip
-                )
-                n += 1
-    return rows
+    return [
+        {"compound": c, "standard": n, "w_pct_m_m": w, "area": a, "purity": PURITY[canon(c)]}
+        for c, n, w, a in calibration_points(CC)
+    ]
 
 
 if __name__ == "__main__":

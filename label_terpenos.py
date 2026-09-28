@@ -366,6 +366,49 @@ def process_binarios(bd: Path):
     )
 
 
+# CC_MF sheet per calibration sample-name prefix: <prefix><n> is dilution En, <prefix>-SM the stock
+CAL_PREFIX = {"E": "eugenol", "C": "carvacrol", "G": "geraniol", "CAM": "camphor",
+              "CARV": "carvone", "2PE": "2pe", "T": "thymol"}  # fmt: skip
+
+
+def process_calibration(cd: Path) -> None:
+    """CC_MF's standards, integrated like every sample: the largest peak after the solvent.
+
+    Per-peak chord only, no global baseline. On these runs arPLS takes the analyte's tail
+    for drift -- carvone's lowest standard ends at 10.20 min instead of 10.66 and loses 9 %
+    -- while every sample peak above 30 mV·min is the same within 0.4 % either way. The
+    chord alone is the area both treatments agree on for the samples.
+
+    Standard n is CC_MF's row order (0 = stock, n = En). Writes out/<cd.name>/areas.csv,
+    which fill_ternarios.calibration_points joins to CC_MF's gravimetric %m/m.
+    """
+    rows = []
+    for fp in sorted(cd.rglob("*.gcd")):
+        ch = read_gcd(fp)
+        name = sample_label(ch)
+        if name == "BLANK":
+            continue
+        pre, n = (name[:-3], 0) if name.endswith("-SM") else (name[:-1], int(name[-1]))
+        pk = max(
+            (
+                p
+                for p in integrate_all_peaks(ch, detect_peaks(ch, PARAMS))
+                if p.time_min > IPA_WINDOW[1]
+            ),
+            key=lambda p: p.area_mV_min,
+        )
+        rows.append(
+            [CAL_PREFIX[pre], n, name, fp.name, f"{pk.time_min:.4f}", f"{pk.area_mV_min:.4f}"]
+        )
+    out_dir = OUT_DIR / cd.name
+    out_dir.mkdir(parents=True, exist_ok=True)
+    with (out_dir / "areas.csv").open("w", newline="") as fh:
+        w = csv.writer(fh)
+        w.writerow(["compound", "standard", "sample", "file", "tR_min", "area_mV_min"])
+        w.writerows(rows)
+    print(f"{cd.name}: calibration, single injection | {len(rows)} standards")
+
+
 # --- main -------------------------------------------------------------------
 def safe(s: str) -> str:
     return re.sub(r"[^\w.-]", "_", s)
@@ -585,6 +628,8 @@ def main(argv=None) -> None:
         if bin_dir.is_dir():
             print()
             process_binarios(bin_dir)
+        print()
+        process_calibration(DATA_DIR / "AaCALIBRACION_TERPENOS")
 
 
 if __name__ == "__main__":

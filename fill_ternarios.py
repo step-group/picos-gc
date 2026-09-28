@@ -10,7 +10,8 @@ L/M/N per vial; the sheet's own formulas turn area -> diluted %m/m -> real %m/m
 (x dilution factor) -> 2-replicate average -> KF water -> normalized ternary point.
 
 The GC response is a power law through the origin, A = α·C^β, fitted in log-log over
-CC_MF.xlsx's SM stock point + E1..E5 with purity-corrected standards (see cc_mf_models).
+CC_MF.xlsx's SM stock point + E1..E5 with purity-corrected standards (see cc_mf_models),
+their areas integrated by label_terpenos like every sample (see calibration_points).
 α and β land in F2:H2 and F3:H3 of every block, and the sheet formulas invert it.
 
 Prereq: `uv run python label_terpenos.py` has produced out/<batch>/merged_samples.csv.
@@ -39,6 +40,7 @@ _ROOT = Path(__file__).resolve().parent  # script-relative so CWD doesn't matter
 WB_IN = _ROOT / "Sistemas ternarios_MF.xlsx"
 WB_OUT = _ROOT / "Sistemas ternarios_MF_filled.xlsx"
 CC_MF = _ROOT / "CC_MF.xlsx"
+CAL_AREAS = _ROOT / "out" / "AaCALIBRACION_TERPENOS" / "areas.csv"  # label_terpenos
 DATA = _ROOT / "FLECK_TERPENOS2026"
 OUT_CSV = _ROOT / "out" / "ternarios_resultados.csv"
 BIN_OUT_CSV = _ROOT / "out" / "binarios_tielines.csv"  # computed Water-solvent binary endpoints
@@ -158,25 +160,45 @@ class Response(NamedTuple):
         return (area / self.alpha) ** (1 / self.beta)
 
 
-def cc_mf_models(xlsx: Path) -> dict[str, Response]:
-    """{canon: power-law Response} from CC_MF.xlsx standards.
+def calibration_points(xlsx: Path) -> list[tuple[str, int, float, float]]:
+    """(CC_MF sheet, standard, %m/m, area) for every standard: the stock (0) plus E1..E5.
 
-    Fit over EVERY (%m/m, Área) pair in cols N/O — the SM stock point plus E1..E5 — as
-    ln A = ln α + β ln(w·P), ordinary least squares in log-log (constant relative error).
-    Through-origin linear read every lowest standard 9-23 % low, a monotone residual in
-    all seven compounds (adsorptive loss at low load); β = 1.03-1.06 takes it out, and a
-    blank still reads zero.
+    %m/m is CC_MF col N, gravimetric. The area is NOT col O: those were integrated in
+    LabSolutions and miss the chromatograms by up to 7 % (camphor E5, 2PE E1, thymol E1),
+    while the samples are integrated by label_terpenos. CAL_AREAS is label_terpenos'
+    integration of the standards themselves, so both sides of the response share one
+    integrator.
     """
+    with CAL_AREAS.open() as fh:
+        areas = {
+            (r["compound"], int(r["standard"])): float(r["area_mV_min"]) for r in csv.DictReader(fh)
+        }
     wb = openpyxl.load_workbook(xlsx, data_only=True)
-    out: dict[str, Response] = {}
+    out = []
     for ws in wb.worksheets:
-        pts = [
-            (float(r[13]), float(r[14]))
+        ws_w = [
+            float(r[13])
             for r in ws.iter_rows(values_only=True)
             if len(r) > 14 and isinstance(r[13], int | float) and isinstance(r[14], int | float)
         ]
+        out += [(ws.title, n, w, areas[(ws.title, n)]) for n, w in enumerate(ws_w)]
+    return out
+
+
+def cc_mf_models(xlsx: Path) -> dict[str, Response]:
+    """{canon: power-law Response} from CC_MF.xlsx standards.
+
+    Fit over every calibration_points standard as ln A = ln α + β ln(w·P), ordinary least
+    squares in log-log (constant relative error). Through-origin linear read every lowest
+    standard 9-23 % low, a monotone residual in all seven compounds (adsorptive loss at
+    low load); β = 1.03-1.07 takes it out, and a blank still reads zero.
+    """
+    by: dict[str, list[tuple[float, float]]] = {}
+    for sheet, _, w, a in calibration_points(xlsx):
+        by.setdefault(canon(sheet), []).append((w, a))
+    out: dict[str, Response] = {}
+    for key, pts in by.items():
         if len(pts) >= 2:
-            key = canon(ws.title)
             x = [math.log(w * PURITY.get(key, 1.0)) for w, _ in pts]
             y = [math.log(a) for _, a in pts]
             xm, ym = sum(x) / len(x), sum(y) / len(y)
@@ -829,13 +851,10 @@ def _selfcheck() -> None:
     assert len(models) == 7 and all(1.0 < m.beta < 1.1 for m in models.values()), models
     # The power law reads every standard back within 6 % (through-origin linear: up to 23 %
     # low at the bottom); camphor, the noisiest curve, needs it: its lowest standard is +5.8 %.
-    wb = openpyxl.load_workbook(CC_MF, data_only=True)
-    for ws in wb.worksheets:
-        m = models[canon(ws.title)]
-        for r in ws.iter_rows(values_only=True):
-            if len(r) > 14 and isinstance(r[13], int | float) and isinstance(r[14], int | float):
-                w = r[13] * PURITY[canon(ws.title)]
-                assert abs(m.conc(r[14]) / w - 1) < 0.06, (ws.title, w, m.conc(r[14]))
+    for sheet, _, w, a in calibration_points(CC_MF):
+        m = models[canon(sheet)]
+        w *= PURITY[canon(sheet)]
+        assert abs(m.conc(a) / w - 1) < 0.06, (sheet, w, m.conc(a))
     assert abs(m.conc(m.alpha * 7.0**m.beta) - 7.0) < 1e-9, "conc does not invert alpha·C^beta"
     a = load_vial_areas(_ROOT / "out" / "A1T1 AL A5B2" / "merged_samples.csv")
     assert abs(a[(1, "T", 1)]["2pe"] - 143.81) < 1, a[(1, "T", 1)]

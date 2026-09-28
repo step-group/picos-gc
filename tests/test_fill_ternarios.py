@@ -51,3 +51,25 @@ def test_power_law_response_inverts_and_bends_below_linear():
     # beta > 1 in every compound: the curve that made through-origin linear read the
     # lowest standards 9-23 % low
     assert all(1.02 < m.beta < 1.07 for m in models.values())
+
+
+def test_calibration_areas_come_from_the_chromatograms():
+    # CC_MF col O was integrated by hand and missed its chromatograms by up to 7 %
+    # (camphor's scatter 4.9 % in ln A); label_terpenos' areas hold every compound's
+    # six standards within 2.5 %
+    import math
+
+    import numpy as np
+
+    from fill_ternarios import CC_MF, PURITY, calibration_points, canon
+
+    by: dict[str, list[tuple[float, float]]] = {}
+    for sheet, _, w, a in calibration_points(CC_MF):
+        k = canon(sheet)
+        by.setdefault(k, []).append((math.log(w * PURITY[k]), math.log(a)))
+    assert set(by) == set(PURITY) and all(len(p) == 6 for p in by.values())
+    for k, pts in by.items():
+        x, y = np.array(pts).T
+        b, c = np.polyfit(x, y, 1)
+        r = y - c - b * x
+        assert math.sqrt(r @ r / 4) < 0.025, k
