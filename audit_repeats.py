@@ -53,6 +53,7 @@ from fill_ternarios import (
     aqueous_keep,
     binary_endpoint,
     binary_vials,
+    response,
     results_rows,
     vial_fractions,
 )
@@ -217,7 +218,7 @@ def _ternary(ws, block: str) -> list[dict]:
     recs = ternary_recs(ws)
     # results_rows: [block, system, phase, ..., closure(9), n_vials(10), flags(11), src(12)]
     computed = {(r[1], r[2]): r for r in results_rows(ws, block, recs)}
-    f2, g2, h2 = _num(ws, "F2"), _num(ws, "G2"), _num(ws, "H2")
+    f2, g2, h2 = response(ws, "F"), response(ws, "G"), response(ws, "H")
     terp_max = aq_terpene_max(ws["M3"].value, ws["N3"].value)
     out = []
     for (sysnum, ph), rows in sorted(groups.items()):
@@ -260,7 +261,7 @@ def _ternary(ws, block: str) -> list[dict]:
 def _binary(ws, block: str) -> list[dict]:
     if ws["A25"].value != "Bin":
         return []
-    g2, h2 = _num(ws, "G2"), _num(ws, "H2")
+    g2, h2 = response(ws, "G"), response(ws, "H")
     hba, hbd = ws["M3"].value, ws["N3"].value
     terp_max = aq_terpene_max(hba, hbd)
     binnum = next((b for b, blk in BIN_TO_BLOCK.items() if blk == block), None)

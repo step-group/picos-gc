@@ -11,6 +11,7 @@ def _sheet():
     ws = wb.active
     ws.title = "Bloque Z"
     ws["F2"], ws["G2"], ws["H2"] = 100.0, 100.0, 100.0  # area per %m/m
+    ws["F3"], ws["G3"], ws["H3"] = 1.0, 1.0, 1.0  # beta = 1: linear response
     ws["M3"], ws["N3"] = "Thymol", "Carvone"
     # Z1: rows 5-6 Superior (both vials, closes), rows 7-8 Inferior (vial 8 never injected)
     # Z2: rows 9-12, no areas at all.

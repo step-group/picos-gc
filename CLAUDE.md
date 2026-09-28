@@ -34,7 +34,8 @@ baseline (`--aqueous-water kf`) and refuses a by-difference CSV.
 
 Each ternary sheet also carries its Water–solvent **binary edge tie-line** (HBA+HBD+Water,
 no 2PE) at rows 25–28, added by `add_binary_tielines.py` (pre-wired formulas reusing the
-sheet's own `$G$2`/`$H$2` slopes). `fill_ternarios.py` auto-fills the HBA/HBD **areas**
+sheet's own `$G$2`/`$H$2` cells; `write_formulas` rewrites their P/Q to the power law, α in
+row 2 and β in row 3). `fill_ternarios.py` auto-fills the HBA/HBD **areas**
 (`M/N`) there from `out/BINARIOS_TERPENOS/samples.csv` via `BIN_TO_BLOCK` (**sequential**:
 BIN _n_ → the _n_-th block in order A,B,C,D,E,F,H,I — 1=ThyCarvone(A) … 8=CamphorEugenol(I);
 all 8 map); masses `D/F/H` and KF water `U/V` stay hand-entered. Carvone reads as "Geraniol"
@@ -124,8 +125,8 @@ would read carvone as 2PE) and the block taken from the sample-name prefix (the 
 blocks; `BIN<n>` → `BIN_TO_BLOCK`). It patches each weighed repeat vial (masses, KF from
 `out/repeat_entry.xlsx`, areas) over its campaign-1 row in an in-memory copy of
 `Sistemas ternarios_MF_filled.xlsx`, whole tubes at a time, and runs the unchanged chain
-(`results_rows`, `binary_tieline_rows`, `audit`). Slopes: CC_MF, the May calibration (the batch
-has no standards). The water–2PE binary has no sheet: organic 2PE = 1 − KF, aqueous from the
+(`results_rows`, `binary_tieline_rows`, `audit`). Response: CC_MF, the May calibration, as a
+power law (`cc_mf_models`; the batch has no standards). The water–2PE binary has no sheet: organic 2PE = 1 − KF, aqueous from the
 GC. Writes `out/repeat_tielines.csv` (old vs new per repeated tube), `out/repeat_list_after.csv`,
 `out/repeat_compare/<block>.png`. Repeat aqueous vials carry no KF, so `results_rows` takes a
 KF-less mostly-water phase as by-difference with a blank closure (`binary_vials`' rule).

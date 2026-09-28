@@ -2,7 +2,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from fill_ternarios import results_rows
+from fill_ternarios import Response, results_rows
 from repeat_results import (
     ALIAS,
     block_of,
@@ -43,7 +43,7 @@ def test_two_pe_binary_endpoints():
         "2PE-B1": {"D": None, "F": None, "H": None, "U": 9.0, "V": 9.2},
     }
     areas = {"2PE-T1": {"2pe": 100.0}}
-    org, aq = two_pe_endpoint(areas, entry, f2=200.0)
+    org, aq = two_pe_endpoint(areas, entry, f2=Response(200.0, 1.0))
     assert org["phase"] == "organic" and org["water"] == pytest.approx(0.091)
     assert org["w_2pe"] == pytest.approx(0.909)
     s = 100.0 / 200.0 * (1.0 / 0.3) / 100
@@ -56,7 +56,7 @@ class _Sheet(dict):
 
 
 def test_aqueous_phase_without_kf_takes_water_by_difference():
-    ws = _Sheet(F2=200.0, G2=180.0, H2=170.0, M3="Thymol", N3="Eugenol")
+    ws = _Sheet(F2=200.0, G2=180.0, H2=170.0, F3=1.0, G3=1.0, H3=1.0, M3="Thymol", N3="Eugenol")
     rec = {"row": 5, "sysnum": 1, "ph": "T", "phase": "Superior", "L": 100.0, "M": 0.1,
            "N": 0.1, "I": 0.3, "K": 1.0, "U": None, "V": None}  # fmt: skip
     (row,) = results_rows(ws, "Z", [rec])

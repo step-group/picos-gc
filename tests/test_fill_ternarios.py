@@ -38,3 +38,16 @@ def test_replicate_mismatch_ignores_trace_peak_wobble():
     # aqueous phase: dominant 2PE fraction is below the constituent gate -> not evaluated.
     g = [{"L": 44.3, "M": 0.0, "N": 0.0}, {"L": 11.1, "M": 0.0, "N": 0.0}]
     assert _replicate_mismatch(g, 0.006, 0.0, 0.0) == 0.0
+
+
+def test_power_law_response_inverts_and_bends_below_linear():
+    from fill_ternarios import CC_MF, PURITY, Response, cc_mf_models
+
+    r = Response(150.0, 1.05)
+    assert r.conc(150.0 * 10.0**1.05) == pytest.approx(10.0)
+    assert r.conc(0.0) == 0.0  # a blank reads zero
+    models = cc_mf_models(CC_MF)
+    assert set(models) == set(PURITY)
+    # beta > 1 in every compound: the curve that made through-origin linear read the
+    # lowest standards 9-23 % low
+    assert all(1.02 < m.beta < 1.07 for m in models.values())

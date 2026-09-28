@@ -7,8 +7,8 @@ BIN3_B2 -> block C's water-solvent edge, 2PE_T1 -> the water-2PE binary). Its ar
 with the masses and organic KF typed into out/repeat_entry.xlsx, replace the
 campaign-1 vials of the same tubes in an in-memory copy of the filled workbook; a
 re-equilibrated tube is a new tie-line, so all its vials are replaced, both phases.
-fill_ternarios' own chain then gives the tie-lines (slopes: CC_MF, the May
-calibration) and audit_repeats re-judges them. The master workbooks are not written.
+fill_ternarios' own chain then gives the tie-lines (response: CC_MF's power law, the
+May calibration) and audit_repeats re-judges them. The master workbooks are not written.
 Rounds stack in ROUNDS order: "old" is campaign 1 with every round but the last, "new"
 adds the last, and the export carries every round.
 
@@ -33,6 +33,7 @@ import matplotlib.pyplot as plt
 import openpyxl
 
 from audit_repeats import COLS, audit, ternary_recs
+from export_vial_data import vial_rows
 from fill_ternarios import (
     _BIN_ROWS,
     BIN_TO_BLOCK,
@@ -41,7 +42,7 @@ from fill_ternarios import (
     _vial_rows,
     binary_tieline_rows,
     canon,
-    cc_mf_slopes,
+    cc_mf_models,
     results_rows,
 )
 from label_terpenos import (
@@ -195,9 +196,10 @@ def _row_of(ws, tube: str, ph: str, rep: int) -> int:
     return next(r for r, s, p, k, _ in _vial_rows(ws) if (s, p, k) == (sysnum, ph, rep))
 
 
-def patch(wb, areas: dict, entry: dict) -> list[str]:
+def patch(wb, areas: dict, entry: dict, rows: set | None = None) -> list[str]:
     """Overwrite each repeat vial's row (masses, KF, areas) in the data_only workbook.
-    Returns the tubes patched. The 2PE-water binary has no sheet; see two_pe_endpoint."""
+    Returns the tubes patched; *rows* collects the (sheet, row) cells overwritten. The
+    2PE-water binary has no sheet; see two_pe_endpoint."""
     tubes = []
     for code, cells in entry.items():
         tube, ph, rep = parse_code(code)
@@ -209,6 +211,8 @@ def patch(wb, areas: dict, entry: dict) -> list[str]:
         ws = wb[f"Bloque {block_of(tube)}"]
         r = _row_of(ws, tube, ph, rep)
         a = areas[code]
+        if rows is not None:
+            rows.add((ws.title, r))
         for col, v in cells.items():
             ws[f"{col}{r}"] = v
         ws[f"L{r}"] = None if tube.startswith("BIN") else a.get("2pe")
@@ -219,13 +223,13 @@ def patch(wb, areas: dict, entry: dict) -> list[str]:
     return tubes
 
 
-def two_pe_endpoint(areas: dict, entry: dict, f2: float) -> list[dict]:
+def two_pe_endpoint(areas: dict, entry: dict, f2) -> list[dict]:
     """The water-2PE binary: organic 2PE = 1 - KF (nothing else in it), aqueous 2PE from
     the GC, water by difference. Same arithmetic as fill_ternarios.vial_fractions."""
     org = [c / 100 for k, e in entry.items() if k.startswith("2PE-") for c in (e["U"], e["V"])
            if c is not None]  # fmt: skip
     aq = [
-        areas[k]["2pe"] / f2 * (e["H"] - e["D"]) / (e["F"] - e["D"]) / 100
+        f2.conc(areas[k]["2pe"]) * (e["H"] - e["D"]) / (e["F"] - e["D"]) / 100
         for k, e in entry.items()
         if k.startswith("2PE-") and "2pe" in areas.get(k, {}) and None not in (e["D"], e["F"])
     ]
@@ -363,23 +367,24 @@ def export(wb, tern_csv: Path, bin_csv: Path) -> None:
         w.writerows(r + [_flag("", f"{r[0]}-bin")] for r in binary_tieline_rows(wb))
 
 
-def patched(rounds: list[tuple[dict, dict]]) -> tuple[openpyxl.Workbook, list[str]]:
-    """The filled workbook with each round patched over it in order; the tubes of the last."""
-    wb, tubes = openpyxl.load_workbook(WB_OUT, data_only=True), []
+def patched(rounds: list[tuple[dict, dict]]) -> tuple[openpyxl.Workbook, list[str], set]:
+    """The filled workbook with each round patched over it in order; the tubes of the last,
+    and every (sheet, row) any round overwrote."""
+    wb, tubes, rows = openpyxl.load_workbook(WB_OUT, data_only=True), [], set()
     for areas, entry in rounds:
-        tubes = patch(wb, areas, entry)
-    return wb, tubes
+        tubes = patch(wb, areas, entry, rows)
+    return wb, tubes, rows
 
 
 def main() -> None:
     rounds = [(integrate(batch), read_entry(entry)) for batch, entry in ROUNDS]
-    wb_old, _ = patched(rounds[:-1])
-    wb_new, tubes = patched(rounds)
+    wb_old, _, _ = patched(rounds[:-1])
+    wb_new, tubes, new_rows = patched(rounds)
     systems = {_system(t) for t in tubes}
     old, new = tielines(wb_old), tielines(wb_new)
     areas = {k: v for a, _ in rounds for k, v in a.items()}
     entry = {k: v for _, e in rounds for k, v in e.items()}
-    two_pe = two_pe_endpoint(areas, entry, cc_mf_slopes(CC_MF)["2pe"])
+    two_pe = two_pe_endpoint(areas, entry, cc_mf_models(CC_MF)["2pe"])
 
     last = f"round {len(ROUNDS)}"
     rows = [{"campaign": "before", **p} for p in old if p["system"] in systems]
@@ -413,8 +418,14 @@ def main() -> None:
                    [p for p in new if p["block"] == block and p["system"] in systems],
                    failed, two_pe, cmp_dir / f"{block}.png")  # fmt: skip
     export(wb_new, OUT / "ternarios_resultados_repeat.csv", OUT / "binarios_tielines_repeat.csv")
+    vials = vial_rows(wb_new, frozenset(new_rows))
+    with (OUT / "vial_measurements_repeat.csv").open("w", newline="") as fh:
+        w = csv.DictWriter(fh, fieldnames=list(vials[0]))
+        w.writeheader()
+        w.writerows(vials)
     print(f"\nWrote {OUT / 'repeat_tielines.csv'}, repeat_list_after.csv, {cmp_dir}/,")
-    print("  ternarios_resultados_repeat.csv, binarios_tielines_repeat.csv (for TESIS)")
+    print("  ternarios_resultados_repeat.csv, binarios_tielines_repeat.csv,")
+    print("  vial_measurements_repeat.csv (for TESIS)")
 
 
 if __name__ == "__main__":

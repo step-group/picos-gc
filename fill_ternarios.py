@@ -9,9 +9,9 @@ Each sheet `Bloque A..I` is a pseudoternary LLE workbook: Water + 2-phenylethano
 L/M/N per vial; the sheet's own formulas turn area -> diluted %m/m -> real %m/m
 (x dilution factor) -> 2-replicate average -> KF water -> normalized ternary point.
 
-All Pend.CC slopes are sourced from CC_MF.xlsx (through-origin fit over the SM stock
-point + E1..E5 — including SM reproduces the workbook's own slopes exactly). This
-fills every block, and replaces the stale 363.58 2PhEt value in E/F/H/I with 187.31.
+The GC response is a power law through the origin, A = α·C^β, fitted in log-log over
+CC_MF.xlsx's SM stock point + E1..E5 with purity-corrected standards (see cc_mf_models).
+α and β land in F2:H2 and F3:H3 of every block, and the sheet formulas invert it.
 
 Prereq: `uv run python label_terpenos.py` has produced out/<batch>/merged_samples.csv.
 Run:    uv run fill_ternarios.py   (PEP 723 header pulls openpyxl; paths are
@@ -24,12 +24,14 @@ from __future__ import annotations
 
 import argparse
 import csv
+import math
 import re
 import shutil
 import subprocess
 import tempfile
 from glob import glob
 from pathlib import Path
+from typing import NamedTuple
 
 import openpyxl
 
@@ -90,6 +92,19 @@ AQ_SOLUBILITY_30C = {
     "camphor": 0.00200,
 }
 AQ_SOLUBILITY_TOL = 1.2  # +20 %: shake-flask literature scatters by that much between labs
+# Certificate purity, mass fraction: Sigma-Aldrich GC assay of the lot used for CC_MF, from
+# aromas_equilibrios_vfinal.xlsx -> Componentes I/J (">99.9 %" taken as 0.999). A standard
+# weighed as w %m/m of reagent holds w·P of the compound, and the inverse reading scales
+# with P exactly, so camphor (96.9 %) was read 3 % high before this correction.
+PURITY = {
+    "2pe": 0.999,  # SDBB2371
+    "thymol": 0.999,  # SHBQ5769
+    "carvone": 0.992,  # SHBQ8402
+    "camphor": 0.969,  # SDBB0718
+    "geraniol": 0.989,  # SHBP7700
+    "carvacrol": 0.997,  # SHBQ9085
+    "eugenol": 0.992,  # SHBM4053
+}
 
 
 def aq_terpene_max(hba, hbd) -> float:
@@ -132,15 +147,28 @@ def hba_priority(wb) -> dict[str, float]:
     return {k: sum(v) / len(v) for k, v in seen.items()}
 
 
-def cc_mf_slopes(xlsx: Path) -> dict[str, float]:
-    """{canon: through-origin slope (area per %m/m)} from CC_MF.xlsx standards.
+class Response(NamedTuple):
+    """GC response A = alpha·C^beta, area vs %m/m in the injected solution."""
 
-    Fit over EVERY (%m/m, Área) pair in cols N/O — the SM stock point plus E1..E5.
-    Including SM is what reproduces the workbook's own Pend.CC exactly (excluding it
-    is ~1-5% low). slope = Σ(wt·area)/Σ(wt²).
+    alpha: float
+    beta: float
+
+    def conc(self, area: float) -> float:
+        """%m/m in the injected solution that gives *area*."""
+        return (area / self.alpha) ** (1 / self.beta)
+
+
+def cc_mf_models(xlsx: Path) -> dict[str, Response]:
+    """{canon: power-law Response} from CC_MF.xlsx standards.
+
+    Fit over EVERY (%m/m, Área) pair in cols N/O — the SM stock point plus E1..E5 — as
+    ln A = ln α + β ln(w·P), ordinary least squares in log-log (constant relative error).
+    Through-origin linear read every lowest standard 9-23 % low, a monotone residual in
+    all seven compounds (adsorptive loss at low load); β = 1.03-1.06 takes it out, and a
+    blank still reads zero.
     """
     wb = openpyxl.load_workbook(xlsx, data_only=True)
-    out: dict[str, float] = {}
+    out: dict[str, Response] = {}
     for ws in wb.worksheets:
         pts = [
             (float(r[13]), float(r[14]))
@@ -148,10 +176,22 @@ def cc_mf_slopes(xlsx: Path) -> dict[str, float]:
             if len(r) > 14 and isinstance(r[13], int | float) and isinstance(r[14], int | float)
         ]
         if len(pts) >= 2:
-            sxy = sum(w * a for w, a in pts)
-            sxx = sum(w * w for w, _ in pts)
-            out[canon(ws.title)] = sxy / sxx
+            key = canon(ws.title)
+            x = [math.log(w * PURITY.get(key, 1.0)) for w, _ in pts]
+            y = [math.log(a) for _, a in pts]
+            xm, ym = sum(x) / len(x), sum(y) / len(y)
+            beta = sum((xi - xm) * (yi - ym) for xi, yi in zip(x, y)) / sum(
+                (xi - xm) ** 2 for xi in x
+            )
+            out[key] = Response(math.exp(ym - beta * xm), beta)
     return out
+
+
+def response(ws, col: str) -> Response | None:
+    """The block's Response for one compound column (F=2PE, G=HBA, H=HBD): α in row 2,
+    β in row 3, as fill_block writes them. None when either is missing."""
+    a, b = _num(ws, f"{col}2"), _num(ws, f"{col}3")
+    return Response(a, b) if a and b else None
 
 
 def load_vial_areas(merged_csv: Path) -> dict[tuple[int, str, int], dict[str, float]]:
@@ -302,7 +342,7 @@ def binary_tieline_rows(wb_d) -> list[list]:
             continue
         block = sheet.split()[-1]
         hba, hbd = ws["M3"].value, ws["N3"].value
-        g2, h2 = _num(ws, "G2"), _num(ws, "H2")
+        g2, h2 = response(ws, "G"), response(ws, "H")
         terp_max = aq_terpene_max(hba, hbd)
         for _row, reps in BIN_PAIRS:
             point, _closure, src, _flags, _kept = binary_endpoint(
@@ -372,20 +412,15 @@ def fill_block(
     if not ws["M3"].value or not ws["N3"].value:
         warn.append(f"{block}: HBA/HBD names still blank; terpene areas not placed")
 
-    # All slopes come from CC_MF (through-origin, SM-inclusive) — the single source of
-    # truth. For A-D this re-writes the same values already there; for E/F/H/I it fills
-    # the blank terpene slopes and replaces the stale 363.58 2PhEt value with 187.31.
-    for cell, comp in (("F2", "2pe"), ("G2", hba_key), ("H2", hbd_key)):
+    # Every response comes from CC_MF (power law, SM-inclusive) — the single source of
+    # truth: α over β, one column per compound. Row 2 held the old through-origin slopes.
+    ws["E2"], ws["E3"] = "α  (A = α·C^β)", "β"
+    for col, comp in (("F", "2pe"), ("G", hba_key), ("H", hbd_key)):
         if comp in cc:
-            new = round(cc[comp], 4)
-            old = _num(ws, cell)
-            if old is not None and abs(old - new) > 0.5:
-                warn.append(
-                    f"{block}: {cell} {old} -> {new} (CC_MF {comp}; was it a separate calibration?)"
-                )
-            ws[cell] = new
+            ws[f"{col}2"] = round(cc[comp].alpha, 6)
+            ws[f"{col}3"] = round(cc[comp].beta, 8)
         elif comp:
-            warn.append(f"{block}: no CC_MF slope for {comp!r} ({cell})")
+            warn.append(f"{block}: no CC_MF response for {comp!r} ({col}2:{col}3)")
 
     recs = []
     for row, sysnum, ph, rep, phase in _vial_rows(ws):
@@ -462,13 +497,13 @@ def _replicate_mismatch(g: list[dict], w, x, y) -> float:
 
 def vial_fractions(r: dict, f2, g2, h2) -> dict | None:
     """One vial's raw mass fractions {s: 2PE, a: HBA, b: HBD, kf: [water...]} from its
-    areas, slopes and dilution K/I. None when the dilution is missing."""
+    areas, Responses f2/g2/h2 and dilution K/I. None when the dilution is missing."""
     df = (r["K"] / r["I"]) if (r["K"] and r["I"]) else None
     if df is None:
         return None
-    s = (r["L"] / f2 * df / 100) if (f2 and r["L"] is not None) else None
-    a = (r["M"] / g2 * df / 100) if (g2 and r["M"] is not None) else None
-    b = (r["N"] / h2 * df / 100) if (h2 and r["N"] is not None) else None
+    s = (f2.conc(r["L"]) * df / 100) if (f2 and r["L"] is not None) else None
+    a = (g2.conc(r["M"]) * df / 100) if (g2 and r["M"] is not None) else None
+    b = (h2.conc(r["N"]) * df / 100) if (h2 and r["N"] is not None) else None
     ks = [c / 100 for c in (r["U"], r["V"]) if c is not None]
     return {"s": s, "a": a, "b": b, "kf": ks, "raw": r}
 
@@ -505,7 +540,7 @@ def results_rows(ws, block: str, recs: list[dict], aqueous_bydiff: bool = True) 
     Organic (water-poor) phases are always KF-anchored. Aqueous (water-rich) phases use
     water BY DIFFERENCE (`aqueous_bydiff=True`, default) or KF proportional normalisation
     (`False`, legacy). The chosen source is emitted per row as `water_src` (kf|bydiff)."""
-    f2, g2, h2 = _num(ws, "F2"), _num(ws, "G2"), _num(ws, "H2")
+    f2, g2, h2 = response(ws, "F"), response(ws, "G"), response(ws, "H")
     hba_name, hbd_name = ws["M3"].value, ws["N3"].value
     groups: dict[tuple[int, str], list[dict]] = {}
     for r in recs:
@@ -608,9 +643,9 @@ def results_rows(ws, block: str, recs: list[dict], aqueous_bydiff: bool = True) 
 # write the full set rather than copy A's gaps. Inputs (L/M/N areas, masses D-K, KF
 # U/V, slopes F2-H2, names M3/N3) live in other cells and are never touched.
 PER_VIAL = {  # one per data row 5..24
-    "O": "=L{r}/$F$2",
-    "P": "=M{r}/$G$2",
-    "Q": "=N{r}/$H$2",  # diluted %m/m = area/slope
+    "O": "=(L{r}/$F$2)^(1/$F$3)",
+    "P": "=(M{r}/$G$2)^(1/$G$3)",
+    "Q": "=(N{r}/$H$2)^(1/$H$3)",  # diluted %m/m = (area/α)^(1/β)
     "R": "=O{r}*$K{r}/$I{r}",
     "S": "=P{r}*$K{r}/$I{r}",
     "T": "=Q{r}*$K{r}/$I{r}",  # x dilution
@@ -630,6 +665,9 @@ PER_PHASE = {  # on the first row r of each (system, phase) pair; averages rows 
 def write_formulas(wb) -> None:
     """Write the full result-formula set into every block (per-vial + per-phase)."""
     for ws in wb.worksheets:
+        if ws["A25"].value == "Bin":  # binary edge: add_binary_tielines wired M/$G$2 there
+            for r in range(25, 29):
+                ws[f"P{r}"], ws[f"Q{r}"] = (PER_VIAL[c].format(r=r) for c in ("P", "Q"))
         for r in range(5, 25):
             for col, f in PER_VIAL.items():
                 ws[f"{col}{r}"] = f.format(r=r)
@@ -716,7 +754,7 @@ def main() -> None:
     aqueous_bydiff = args.aqueous_water == "difference"
     print(f"aqueous-phase water: {args.aqueous_water}")
 
-    cc = cc_mf_slopes(CC_MF)
+    cc = cc_mf_models(CC_MF)
     wb = openpyxl.load_workbook(WB_IN, data_only=False)  # keep formulas (write target)
     wb_d = openpyxl.load_workbook(WB_IN, data_only=True)  # cached values (read masses/KF)
     priority = hba_priority(wb)  # HBA/HBD ordering learned from labelled sheets
@@ -741,7 +779,7 @@ def main() -> None:
         all_rows += results_rows(ws, block, recs, aqueous_bydiff)
         print(
             f"Bloque {block}: filled {len(recs)}/20 vials "
-            f"(HBA={ws['M3'].value}, HBD={ws['N3'].value}, 2PhEt slope={_num(ws, 'F2')})"
+            f"(HBA={ws['M3'].value}, HBD={ws['N3'].value}, 2PhEt α={_num(ws, 'F2')} β={_num(ws, 'F3')})"
         )
 
     write_formulas(wb)
@@ -787,15 +825,18 @@ def main() -> None:
 
 
 def _selfcheck() -> None:
-    s = cc_mf_slopes(CC_MF)
-    # SM-inclusive fit must reproduce the workbook's own Pend.CC slopes exactly.
-    for comp, expect in (
-        ("2pe", 187.3142),
-        ("thymol", 176.3849),
-        ("carvone", 171.2346),
-        ("geraniol", 166.2694),
-    ):
-        assert abs(s[comp] - expect) < 0.05, f"{comp}: {s[comp]} != {expect}"
+    models = cc_mf_models(CC_MF)
+    assert len(models) == 7 and all(1.0 < m.beta < 1.1 for m in models.values()), models
+    # The power law reads every standard back within 6 % (through-origin linear: up to 23 %
+    # low at the bottom); camphor, the noisiest curve, needs it: its lowest standard is +5.8 %.
+    wb = openpyxl.load_workbook(CC_MF, data_only=True)
+    for ws in wb.worksheets:
+        m = models[canon(ws.title)]
+        for r in ws.iter_rows(values_only=True):
+            if len(r) > 14 and isinstance(r[13], int | float) and isinstance(r[14], int | float):
+                w = r[13] * PURITY[canon(ws.title)]
+                assert abs(m.conc(r[14]) / w - 1) < 0.06, (ws.title, w, m.conc(r[14]))
+    assert abs(m.conc(m.alpha * 7.0**m.beta) - 7.0) < 1e-9, "conc does not invert alpha·C^beta"
     a = load_vial_areas(_ROOT / "out" / "A1T1 AL A5B2" / "merged_samples.csv")
     assert abs(a[(1, "T", 1)]["2pe"] - 143.81) < 1, a[(1, "T", 1)]
     assert canon("2PE") == "2pe" and canon("DL-Camphor") == "camphor", "canon broken"
