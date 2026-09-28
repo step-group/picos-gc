@@ -62,6 +62,7 @@ SAMPLE_UL, IPA_UL = 300, 700  # ternary vials, like the binaries (template said 
 # DES prep table (10 g, 1:1 molar): rows 17-25 of datos_des, DES name in B. Sheet1 is
 # the 5 g variant: hidden in the output, every batch is made at 10 g to have spare.
 DES_ROWS = range(17, 26)
+DES_TYPOS = {"ThyGe": "ThyGer"}  # Lab_DES' BIN2 row; datos_des and B1 spell it ThyGer
 DES_BIN_ROW = 29  # below the table's legend (row 27): one duplicated row per binary
 DES_CLUTTER_ROWS = range(1, 14)  # datos_des' LLE/VLE status matrix above the prep table
 DES_EXP_COLS = "GL"  # m_HBA exp / m_HBD exp of the first campaign: cleared, to be weighed anew
@@ -300,6 +301,7 @@ def trim(wb, tubes: set[str], aq_only: set[str] = frozenset()) -> None:
     keep_lab = {r for r in LAB_ROWS if lab[f"A{r}"].value in tubes}
     for r in keep_lab:
         _backfill(lab, r)
+        lab[f"B{r}"].value = DES_TYPOS.get(lab[f"B{r}"].value, lab[f"B{r}"].value)
     has_bin = any(t.startswith("BIN") for t in tubes)
     _hide(lab, LAB_ROWS, keep_lab | ({LAB_BIN_HEADER} if has_bin else set()))
     for col in LAB_RECORD_COLS:
