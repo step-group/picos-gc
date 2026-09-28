@@ -331,9 +331,11 @@ FIELDS = ["campaign", "block", "system", "phase", "w_2pe", "hba", "w_hba", "hbd"
 # A1 and A4 sit 3x above the binary. Taken back out the same day, final as they stand:
 # the A edge (BIN1, its round-1 repeat is good), A2, A3, I4 and the I edge. Exported with
 # a `tentative` flag -- on the whole tie-line, since a tie-line is drawn whole -- so they
-# draw as suspect until round 2 replaces them. Round 2 landed (REPETICIONES_26SEP2026):
-# emptied; put back a point the user still judges wrong after it.
-TENTATIVE: set[str] = set()
+# draw as suspect until round 2 replaces them. Round 2 landed (REPETICIONES_26SEP2026)
+# and cleared those; it left two campaign-1 points of block B above its now-clean trend
+# (2026-09-28, the user's call): B5 at 400 ppm terpene between B3's 160 and B1's 80, and
+# the B edge at 1160 ppm, 3.6x B2 (edge_ternary_mismatch). Queued for round 3.
+TENTATIVE = {"B5", "B-bin"}
 TERN_HEAD = ["block", "system", "phase", "solute_2phet", "HBA", "HBA_wt", "HBD", "HBD_wt",
              "water", "closure", "n_vials", "flags", "water_src"]  # fmt: skip
 BIN_HEAD = ["block", "phase", "HBA", "HBA_wt", "HBD", "HBD_wt", "water", "water_src", "flags"]
