@@ -543,6 +543,11 @@ def mismatch_flag(screen: str, organic: bool) -> bool:
 # repeat_results.patch writes a patched row's batch here; an unwritten row is campaign 1.
 BATCH_COL = "AZ"
 BINARIES_BATCH = "BINARIOS_TERPENOS"
+# A batch with no clean organic endpoint of its own, run in another batch's column state,
+# borrows that batch's phi (the user's call, 2026-09-28). Round 2 sampled aqueous phases
+# only, four days after round 1, on the same method (2PE t_R 10.71 vs 10.70 min); round
+# 1's twelve organic endpoints over two days scatter 0.8 %. TESIS carries the gap.
+TRANSFER_PROXY = {"REPETICIONES_26SEP2026": "REPETICIONES_22SEP2026"}
 
 
 def batch_of(ws, row: int) -> str:
@@ -557,7 +562,7 @@ def transfer_factors(sheets) -> dict[str, float]:
     the median over its clean organic endpoints of G/(1 - w_KF): an organic phase's true
     non-water mass is 1 - KF, so the GC total G reads phi times it. The organic phase
     needs no phi (it cancels in kf_anchor); the aqueous organics are divided by it
-    (results_rows, binary_endpoint). The median keeps one endpoint-level failure (H4 at
+    (results_rows, binary_endpoint); TRANSFER_PROXY lends one to a batch without. The median keeps one endpoint-level failure (H4 at
     0.55) from moving its batch. *sheets*: (ws, recs) pairs, recs as fill_block returns.
     A batch with no clean organic endpoint has no entry: its aqueous stays uncorrected.
     """
@@ -585,7 +590,11 @@ def transfer_factors(sheets) -> dict[str, float]:
         if ws["A25"].value == "Bin":
             for _, reps in BIN_PAIRS:
                 add(ws, reps[0], aqueous_keep(binary_vials(ws, reps, g2, h2), terp_max))
-    return {b: statistics.median(v) for b, v in by.items()}
+    phi = {b: statistics.median(v) for b, v in by.items()}
+    for b, p in TRANSFER_PROXY.items():
+        if b not in phi and p in phi:
+            phi[b] = phi[p]
+    return phi
 
 
 def vial_fractions(r: dict, f2, g2, h2) -> dict | None:
