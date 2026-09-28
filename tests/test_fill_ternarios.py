@@ -47,6 +47,17 @@ def test_replicate_screen_names_the_failure():
     assert replicate_screen([_v(0.0, 0.4, 0.4), _v(0.0, 0.41, 0.4)]) == ""
 
 
+def test_aqueous_keep_drops_the_richer_vial_of_a_droplet_pair():
+    from fill_ternarios import aqueous_keep
+
+    lean = {"s": 0.020, "a": 1e-4, "b": 1e-4, "kf": [0.98]}
+    rich = {"s": 0.023, "a": 4e-4, "b": 4e-4, "kf": [0.98]}  # B1: below the ceiling
+    assert aqueous_keep([rich, lean], terp_max=0.003) == [lean]
+    # a whole-vial slip is not droplets: which vial is right is not in the data
+    slip = {"s": 0.030, "a": 1.5e-4, "b": 1.5e-4, "kf": [0.98]}
+    assert aqueous_keep([lean, slip], terp_max=0.003) == [lean, slip]
+
+
 class _Sheet(dict):
     title = "Bloque Z"
 

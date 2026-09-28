@@ -168,4 +168,9 @@ aqueous vials only): "old" is every round but the last, the export carries all o
 `ALIAS` maps round 2's phase-less `BIN6_1/2` to `BIN6_B1/B2`.
 Round 3 (prepared 2026-09-28, both phases, fresh organic KF): `--round 3 B5 BIN2` (entry sheet: `B5 BIN2 2PE`, the water-2PE binary re-measured too, hand-prepared, not in the prep book) -- the
 two campaign-1 points round 2 left above block B's trend; `TENTATIVE` holds them until it
-lands, then append its `(batch, out/repeat3_entry.xlsx)` to `ROUNDS`.
+lands, then append its `(batch, out/repeat3_entry.xlsx)` to `ROUNDS`. Extended the same
+day with the replicate screen's four undecidable aqueous pairs and the E edge, aqueous only
+(the user's call: the organic phases are sound, a whole-vial slip cancels in the anchor):
+prep book `--round 3 B5 BIN2 F3:aq F4:aq H5:aq I4:aq BIN5:aq`, entry sheet the same plus
+`2PE` -- 22 vials. The droplet pairs (A2, B1, B5, H2 aqueous) need no repeat: aqueous_keep
+takes their leaner vial.

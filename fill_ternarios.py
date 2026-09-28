@@ -351,7 +351,7 @@ def binary_endpoint(
     else:
         x, y = a / phi, b / phi
         z, closure, src = max(0.0, 1.0 - x - y), None, "bydiff"
-    if replicate_screen(kept):
+    if mismatch_flag(replicate_screen(kept), organic=w < ORGANIC_WATER_MAX):
         flags.append("replicate_mismatch")
     return [x, y, z], closure, src, flags, kept
 
@@ -530,6 +530,13 @@ def replicate_screen(vials: list[dict]) -> str:
     return ""
 
 
+def mismatch_flag(screen: str, organic: bool) -> bool:
+    """Whether a screen failure flags the POINT. An organic phase's whole-vial slip
+    scales every component alike and cancels in kf_anchor -- its composition is sound
+    (F1, F3, F4, H2, I2), so it stays unflagged; transfer_factors still skips it."""
+    return bool(screen) and not (organic and screen == "whole_vial")
+
+
 # GC batch of a vial row. A batch is one instrument sequence, and it is what the response
 # transfer (transfer_factors) is a property of: the campaign-1 blocks ran Mar-Apr at
 # 2PE t_R 9.75 min, the May calibration and the September repeats at 10.7-10.85 min.
@@ -603,8 +610,9 @@ def aqueous_keep(vials: list[dict], terp_max: float) -> list[dict]:
     phase — majority-water AND majority-organic at once (E2 Superior: ~96 % KF water with
     a full organic terpene load); (2) an aqueous vial that took organic-phase droplets —
     terpenes above `terp_max` (see aq_terpene_max) — when its pair is clean, since
-    carryover only ever adds organics. If every vial fails, keep them all (the point stays
-    flagged downstream)."""
+    carryover only ever adds organics; (3) below that ceiling, the richer vial of an
+    aqueous pair whose components spread apart. If every vial fails, keep them all (the
+    point stays flagged downstream)."""
 
     def water(v):
         return sum(v["kf"]) / len(v["kf"]) if v["kf"] else 0.0
@@ -617,6 +625,19 @@ def aqueous_keep(vials: list[dict], terp_max: float) -> list[dict]:
     if any(water(v) >= ORGANIC_WATER_MAX for v in keep):  # aqueous phase
         clean = [v for v in keep if _terp(v) <= terp_max]
         keep = clean or keep
+        # (3) Droplets below saturation: a pair whose components spread apart
+        # (replicate_screen) took organic phase into one vial -- the terpenes jump, 2PE
+        # barely moves, B1's excess is the organic phase's own composition. Carryover
+        # only adds, so the leaner vial is the aqueous phase (2026-09-28: A2, B1, B5, H2).
+        # The terpenes must be what moved: droplets carry 2PE too (B1's is 1.16x) but
+        # far less, relative to what is dissolved; a pair apart in 2PE alone is not
+        # droplets and stays flagged.
+        if replicate_screen(keep) == "component_spread" and all(
+            v["s"] and _terp(v) for v in keep
+        ):
+            (s1, s2), (t1, t2) = ([v["s"] for v in keep], [_terp(v) for v in keep])
+            if abs(math.log(t2 / t1)) > abs(math.log(s2 / s1)):
+                keep = [min(keep, key=_terp)]
     return keep
 
 
@@ -700,7 +721,7 @@ def results_rows(
                 closure = None
             elif not (lo <= closure <= hi):
                 flags.append("low_closure")
-            if replicate_screen(use):
+            if mismatch_flag(replicate_screen(use), organic=z < ORGANIC_WATER_MAX):
                 flags.append("replicate_mismatch")
             if dropped:
                 flags.append("dropped_replicate")
