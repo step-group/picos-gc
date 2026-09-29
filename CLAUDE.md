@@ -173,9 +173,12 @@ user on 2026-09-28 (the thymol-geraniol points); its GC folder and typed sheet a
 yet. **One round = one GC batch + one entry sheet**: never add tubes to a round already run.
 
 Round 4 (prepared 2026-09-28, aqueous only -- the user's call: the organic phases are sound,
-a whole-vial slip cancels in the anchor): `--round 4 F3:aq F4:aq H2:aq H5:aq I4:aq BIN5:aq`
-(12 vials) -- the replicate screen's four undecidable aqueous pairs, the E edge, and H2,
-whose one surviving vial sits off both its block's terpene trend and K. The droplet pairs
+a whole-vial slip cancels in the anchor): `--round 4 C2:aq H2:aq H5:aq I4:aq BIN5:aq`
+(10 vials) -- two of the replicate screen's undecidable aqueous pairs (H5, I4), the E edge,
+H2 (its one surviving vial sits off both its block's terpene trend and K) and C2 (reads
+above its own water-solvent edge, 1218 vs 1018 ppm). F3 and F4 also fail the screen but are
+not repeated -- the user's call: their means sit on block F's trend, so they keep the
+two-point interval. The droplet pairs
 (A2, B1, B5, H2) otherwise need no repeat: aqueous_keep takes their leaner vial. An
 aqueous-only batch has no organic endpoint to estimate phi from: run a CC_MF standard at
 the start, middle and end of the sequence (or add it to TRANSFER_PROXY, as round 2 is).
