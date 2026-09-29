@@ -486,12 +486,14 @@ version = "0.1.0"
 source = { editable = "pcsaft-quaternary" }
 dependencies = [
     { name = "feos" },
+    { name = "openpyxl" },
     { name = "python-ternary" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "feos", specifier = ">=0.9.4" },
+    { name = "openpyxl", specifier = ">=3.1.5" },
     { name = "python-ternary", specifier = ">=1.0.8" },
 ]
 
