@@ -13,7 +13,7 @@ tube is a new tie-line, so the printable vial sheets (PLANTILLA_IMPRESION.xlsx's
 template lacks (I - CamEug) is cloned from the last ternary block. Vial codes stay in
 the template's hyphen form (C4-T1), which fill_ternarios' CODE_RE accepts.
 
-Run: uv run make_repeat_workbook.py [EXTRA_TUBE ...]   e.g.  uv run make_repeat_workbook.py D2
+Run: uv run python lle/make_repeat_workbook.py [EXTRA_TUBE ...]   e.g.  uv run python lle/make_repeat_workbook.py D2
   -> out/aromas_equilibrios_repeat.xlsx
 """
 

@@ -11,7 +11,7 @@ Two labelling dimensions:
 
 BINARIOS_TERPENOS is handled separately (different method / retention times).
 
-Run from the repo root:  uv run python label_terpenos.py
+Run from the repo root:  uv run python lle/label_terpenos.py
 """
 
 from __future__ import annotations

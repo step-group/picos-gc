@@ -4,7 +4,7 @@ fractions, old vs new tie-lines.
 The batch ran on a new 17-min method and mixes every block in one folder, so it gets
 its own fixed retention-time map keyed on the sample-name prefix (C4_T1 -> block C,
 BIN3_B2 -> block C's water-solvent edge, 2PE_T1 -> the water-2PE binary). Its areas,
-with the masses and organic KF typed into out/repeat_entry.xlsx, replace the
+with the masses and organic KF typed into data/entry/repeat_entry.xlsx, replace the
 campaign-1 vials of the same tubes in an in-memory copy of the filled workbook; a
 re-equilibrated tube is a new tie-line, so all its vials are replaced, both phases.
 fill_ternarios' own chain then gives the tie-lines (response: CC_MF's power law, the
@@ -12,7 +12,7 @@ May calibration) and audit_repeats re-judges them. The master workbooks are not 
 Rounds stack in ROUNDS order: "old" is campaign 1 with every round but the last, "new"
 adds the last, and the export carries every round.
 
-Run from the repo root: uv run python repeat_results.py
+Run from the repo root: uv run python lle/repeat_results.py
   -> out/<batch>/{areas.csv, <sample>_labeled.png}   one folder per round
      out/repeat_tielines.csv   before and after the last round, its tubes only
      out/repeat_list_after.csv audit_repeats verdicts with the repeats in

@@ -27,7 +27,7 @@ data; the repeat decides.
 aqueous_2pe_outlier = see _2pe_outliers.
 edge_ternary_mismatch = see _edge_vs_ternary.
 
-Run: uv run audit_repeats.py   ->  out/repeat_list.csv + console table
+Run: uv run python lle/audit_repeats.py   ->  out/repeat_list.csv + console table
 """
 
 from __future__ import annotations

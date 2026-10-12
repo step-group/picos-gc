@@ -6,22 +6,28 @@ Run: `uv run picos-gc *.gcd` (or a directory). Test: `uv run pytest`. Uses `uv`,
 `pcsaft-quaternary` is a submodule: a fresh clone needs `git submodule update --init` before uv can sync.
 
 ## Which file holds what (LLE measurements)
-- **Inputs, hand-made, never written by a script:** `Sistemas ternarios_MF.xlsx` (campaign 1:
-  masses, KF), one typed entry sheet per repeat round (`out/repeat_entry.xlsx`,
-  `out/repeat2_entry.xlsx` … `out/repeat4_entry.xlsx` — force-tracked although `out/` is
-  ignored; `git add -f`), one GC folder per batch under `FLECK_TERPENOS2026/`, `CC_MF.xlsx`.
+- **Layout:** `lle/` the LLE scripts (run `uv run python lle/<script>.py` from the repo
+  root), `data/gc/` one GC folder per batch, `data/workbooks/` the hand-made workbooks,
+  `data/entry/` the typed entry sheets, `templates/` the print templates, `out/`
+  regenerable only. `lle/paths.py` is the only place a location is defined.
+- **Inputs, hand-made, never written by a script:** `data/workbooks/Sistemas ternarios_MF.xlsx`
+  (campaign 1: masses, KF), one typed entry sheet per repeat round
+  (`data/entry/repeat_entry.xlsx`, `repeat2_entry.xlsx` … `repeat4_entry.xlsx`), one GC
+  folder per batch under `data/gc/`, `data/workbooks/CC_MF.xlsx`.
 - **The complete record:** `out/vial_ledger.csv` (`repeat_results.py`) — every vial ever
   injected, campaign 1 (`round` 0) and each round in `ROUNDS`, with `status`
   current/superseded and `superseded_by`. "Did I re-do X?" is answered here.
 - **Derived views:** `out/vial_measurements_repeat.csv` (the ledger's current rows; main
-  checks they agree), the tie-line exports `out/*_repeat.csv`, the filled workbook. TESIS
+  checks they agree), the tie-line exports `out/*_repeat.csv`, the filled workbook
+  (`out/Sistemas ternarios_MF_filled.xlsx`, untracked: on a fresh clone run
+  `lle/label_terpenos.py` and `lle/fill_ternarios.py` first). TESIS
   copies the ledger, the current vials, the tie-lines and `gc_calibration.csv`.
 - A new round: add its GC folder and entry sheet, append it to `ROUNDS`, re-run.
 
 ## Architecture (`src/picos_gc/`)
 - `deconvolution.py` — EMG (exponentially-modified Gaussian) curve-fit for fused peak groups; `integrator` uses it for `--split-mode deconvolve` (fits N≥2 groups, falls back to `drop` on any fit failure; isolated peaks unchanged, so only fused-group `area_mV_min` differs)
 
-Deconvolution impact on real data (`deconv_impact.py`, repo root) is small: quantified analytes are well-resolved, so sizable peaks (area ≥ 1) move <~23% only for a handful of fused shoulders and the giant solvent peak — quantified terpene/2PE areas barely change. Run: `uv run python deconv_impact.py <dir>`.
+Deconvolution impact on real data (`lle/deconv_impact.py`) is small: quantified analytes are well-resolved, so sizable peaks (area ≥ 1) move <~23% only for a handful of fused shoulders and the giant solvent peak — quantified terpene/2PE areas barely change. Run: `uv run python lle/deconv_impact.py data/gc/<batch>`.
 
 ## `.gcd` metadata: sample name
 The operator-entered sample name lives in the OLE2 `File Property` stream as
@@ -85,7 +91,7 @@ at 1 unless `TRANSFER_PROXY` lends it another batch's (round 2 borrows round 1's
 low in campaign-1 blocks against round-1 ones before the correction, +0.5 % after.
 
 ## Repeat audit
-`uv run audit_repeats.py` reads `Sistemas ternarios_MF_filled.xlsx` only (no `out/` needed)
+`uv run python lle/audit_repeats.py` reads the filled workbook only (no other `out/` file)
 and writes `out/repeat_list.csv`: one row per (system, phase) point, ternary **and** binary,
 with a `repeat` verdict. Reasons: `missing_vials` (blank L/M/N = never injected),
 `low_closure`, `replicate_mismatch` (both via `fill_ternarios.results_rows`, so they match
@@ -112,9 +118,9 @@ D5, F5, I2), and the `dropped` column names it. Points with no vials (C4, C5) ap
 but are **absent** from `ternarios_resultados.csv`. A single KF titration is reported as
 `n_kf`, not a repeat reason. Re-run `fill_ternarios.py` first if the master
 workbook changed. Printable lab worksheet (checkboxes, sample codes, per-reason action):
-`typst compile repeat_list.typ out/repeat_list.pdf` — it reads the CSV, no Python.
+`typst compile --root . lle/repeat_list.typ out/repeat_list.pdf` — it reads the CSV, no Python.
 
-Lab prep book for the repeat campaign: `uv run make_repeat_workbook.py [EXTRA_TUBE ...]` →
+Lab prep book for the repeat campaign: `uv run python lle/make_repeat_workbook.py [EXTRA_TUBE ...]` →
 `out/aromas_equilibrios_repeat.xlsx`; how it trims, hides and paginates is in the
 `repeat-prep-book` skill — read it before touching that script. It also writes the **bench
 printout**, `*_print.xlsx` + `.pdf` (headless LibreOffice): only DES prep, tube prep and the
@@ -123,7 +129,7 @@ their width given to Notes so the vial-sheet page breaks still hold. Print that 
 
 Later rounds: `--round N TUBE ...` on both `make_repeat_workbook.py` and
 `make_entry_workbook.py` takes exactly the named tubes (no `repeat_list.csv`, no
-`EXTRA_TUBES`), writes `out/aromas_equilibrios_repeat<N>.xlsx` / `out/repeat<N>_entry.xlsx`
+`EXTRA_TUBES`), writes `out/aromas_equilibrios_repeat<N>.xlsx` / `data/entry/repeat<N>_entry.xlsx`
 so round 1's typed record is never rebuilt over, and opens every organic KF cell (a new
 tube is a new tie-line). A `:aq` suffix (`B2:aq`) makes a tube aqueous-only: the entry sheet
 lists only its aqueous vials, so `repeat_results.patch` replaces only those and the organic
@@ -134,8 +140,8 @@ BIN6:aq`. Block A's organic phase
 floats when thymol–carvone-rich (A1 A3 A4) and sinks when 2PE-rich (A2 A5); the entry
 sheet reads that off campaign-1 KF, so it is right, not a mix-up.
 
-Data-entry sheet for the repeat vials: `uv run make_entry_workbook.py [EXTRA_TUBE ...]` →
-`out/repeat_entry.xlsx`, one row per vial of the same tubes plus `EXTRA_TUBES` (the `2PE`
+Data-entry sheet for the repeat vials: `uv run python lle/make_entry_workbook.py [EXTRA_TUBE ...]` →
+`data/entry/repeat_entry.xlsx`, one row per vial of the same tubes plus `EXTRA_TUBES` (the `2PE`
 water binary, `2PE-T1` … `2PE-B2`, and D2). **The user types into that file**: a re-run reads
 every unlocked cell of the existing one (`typed`), writes it back by vial code (`carry`),
 keeps the previous file as `.bak.xlsx`, and refuses to save if a typed value has no input
@@ -144,22 +150,22 @@ the campaign-1 KF < `ORGANIC_WATER_MAX`; `ORGANIC_OVERRIDE` for a tube with no h
 only typeable for the tubes in `FRESH_KF` (organic KF re-measured) — the others show their
 campaign-1 `U/V` read-only. Sheet protected without password; row 7 names the master
 workbook column of each value. Test: `tests/test_make_entry_workbook.py`. The filled
-`out/repeat_entry.xlsx` is the lab record of the repeat campaign's weighings and KF, so it is
-**tracked** (force-added despite `out/` being ignored; later edits show as modified).
+`data/entry/repeat_entry.xlsx` is the lab record of the repeat campaign's weighings and KF, so
+it is **tracked** (later edits show as modified; its `.bak.xlsx` is ignored).
 
 ## Repeat campaign results
-`uv run python repeat_results.py` integrates `FLECK_TERPENOS2026/REPETICIONES_22SEP2026/` with its **own** retention-time map
+`uv run python lle/repeat_results.py` integrates `data/gc/REPETICIONES_22SEP2026/` with its **own** retention-time map
 (`REPEAT_TR`: a new 17-min method, 2PE at 10.72, carvone at 9.67 — `label_terpenos`' maps
 would read carvone as 2PE) and the block taken from the sample-name prefix (the folder mixes
 blocks; `BIN<n>` → `BIN_TO_BLOCK`). It patches each weighed repeat vial (masses, KF from
-`out/repeat_entry.xlsx`, areas) over its campaign-1 row in an in-memory copy of
-`Sistemas ternarios_MF_filled.xlsx`, whole tubes at a time, and runs the unchanged chain
+`data/entry/repeat_entry.xlsx`, areas) over its campaign-1 row in an in-memory copy of
+`out/Sistemas ternarios_MF_filled.xlsx`, whole tubes at a time, and runs the unchanged chain
 (`results_rows`, `binary_tieline_rows`, `audit`). Response: CC_MF, the May calibration, as a
 power law (`cc_mf_models`; the batch has no standards). The water–2PE binary has no sheet: organic 2PE = 1 − KF, aqueous from the
 GC. Writes `out/repeat_tielines.csv` (old vs new per repeated tube), `out/repeat_list_after.csv`,
 `out/repeat_compare/<block>.png`. Repeat aqueous vials carry no KF, so `results_rows` takes a
 KF-less mostly-water phase as by-difference with a blank closure (`binary_vials`' rule).
-Rounds stack in `ROUNDS` order (round 2 = `REPETICIONES_26SEP2026` + `out/repeat2_entry.xlsx`,
+Rounds stack in `ROUNDS` order (round 2 = `REPETICIONES_26SEP2026` + `data/entry/repeat2_entry.xlsx`,
 aqueous vials only): "old" is every round but the last, the export carries all of them;
 `ALIAS` maps round 2's phase-less `BIN6_1/2` to `BIN6_B1/B2`.
 Round 3 (prepared 2026-09-28, both phases, fresh organic KF): `--round 3 B5 BIN2`, 8 vials (the water-2PE binary was on the entry sheet too, but the user did not run it -- dropped 2026-09-29; round 1's stays) -- the

@@ -104,7 +104,7 @@ def test_later_rounds_name_their_tubes_and_their_own_files():
     assert round_args(["D2"], out) == (None, out)  # round 1: repeat_list.csv + argv
     tubes, o = round_args(["--round", "2", "A1", "BIN1"], out)
     assert tubes == {"A1", "BIN1"} and o.name == "aromas_equilibrios_repeat2.xlsx"
-    entry = round_args(["--round", "2"], Path("out/repeat_entry.xlsx"))[1]
+    entry = round_args(["--round", "2"], Path("data/entry/repeat_entry.xlsx"))[1]
     assert entry.name == "repeat2_entry.xlsx"
 
 

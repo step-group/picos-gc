@@ -16,9 +16,9 @@ endpoint is recoverable exactly (see `water_bydiff`). A row is aqueous iff its r
 water > 0.5 (aqueous 0.97-0.999 vs organic 0.01-0.08 — no overlap), matching the
 pipeline's ORGANIC_WATER_MAX=0.5 discriminator.
 
-Run: uv run compare_aqueous_water.py        (prints the table, writes the bydiff CSV,
+Run: uv run python lle/compare_aqueous_water.py        (prints the table, writes the bydiff CSV,
                                              regenerates out/tielines_bydiff/)
-     uv run compare_aqueous_water.py --check (self-check only)
+     uv run python lle/compare_aqueous_water.py --check (self-check only)
 """
 
 from __future__ import annotations
@@ -163,7 +163,7 @@ def _check() -> None:
 
 def main() -> None:
     if not SRC_CSV.exists():
-        sys.exit(f"missing {SRC_CSV} — run `uv run fill_ternarios.py` first")
+        sys.exit(f"missing {SRC_CSV} — run `uv run python lle/fill_ternarios.py` first")
     with SRC_CSV.open(newline="") as fh:
         reader = csv.DictReader(fh)
         rows = list(reader)
@@ -174,7 +174,7 @@ def main() -> None:
     if any(r.get("water_src") == "bydiff" for r in rows):
         sys.exit(
             f"{SRC_CSV.name} is already by-difference; this tool needs a KF baseline. "
-            "Regenerate it with:\n  uv run fill_ternarios.py --aqueous-water kf"
+            "Regenerate it with:\n  uv run python lle/fill_ternarios.py --aqueous-water kf"
         )
     analyze(rows)
     write_bydiff_csv(rows, list(fieldnames))

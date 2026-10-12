@@ -4,7 +4,7 @@ Detection runs once per file; only integration is repeated per split mode, so
 peaks line up 1:1 and only their area changes. Writes out/deconv_impact.csv
 and prints a summary.
 
-Run: uv run python deconv_impact.py FLECK_TERPENOS2026/BINARIOS_TERPENOS
+Run: uv run python lle/deconv_impact.py data/gc/BINARIOS_TERPENOS
 """
 
 from __future__ import annotations
@@ -60,7 +60,7 @@ def _iter_gcd(inputs: list[Path]):
 def main(argv: list[str] | None = None) -> None:
     argv = sys.argv[1:] if argv is None else argv
     if not argv:
-        print("usage: uv run python deconv_impact.py FILES_OR_DIRS", file=sys.stderr)
+        print("usage: uv run python lle/deconv_impact.py FILES_OR_DIRS", file=sys.stderr)
         sys.exit(1)
 
     files = list(_iter_gcd([Path(a) for a in argv]))

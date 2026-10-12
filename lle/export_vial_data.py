@@ -15,7 +15,7 @@ purity fill_ternarios corrects them by. fill_ternarios reduces them to a power-l
 response (alpha, beta); the uncertainty analysis needs the points themselves,
 because the inverse-prediction interval cannot be recovered from two parameters.
 
-Run: uv run export_vial_data.py       (campaign 1 only, from the filled workbook)
+Run: uv run python lle/export_vial_data.py       (campaign 1 only, from the filled workbook)
 repeat_results.py writes the same table with every repeat round patched in,
 out/vial_measurements_repeat.csv -- the one that matches the tie-lines TESIS uses.
 """

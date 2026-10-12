@@ -14,8 +14,8 @@ CC_MF.xlsx's SM stock point + E1..E5 with purity-corrected standards (see cc_mf_
 their areas integrated by label_terpenos like every sample (see calibration_points).
 α and β land in F2:H2 and F3:H3 of every block, and the sheet formulas invert it.
 
-Prereq: `uv run python label_terpenos.py` has produced out/<batch>/merged_samples.csv.
-Run:    uv run fill_ternarios.py   (PEP 723 header pulls openpyxl; paths are
+Prereq: `uv run python lle/label_terpenos.py` has produced out/<batch>/merged_samples.csv.
+Run:    uv run python lle/fill_ternarios.py   (PEP 723 header pulls openpyxl; paths are
         script-relative, so it works from any directory)
         (also shells out to pcsaft-quaternary/plot_experimental_tielines.py at the
         end, so the ternary diagrams under out/tielines/ are regenerated in one go)

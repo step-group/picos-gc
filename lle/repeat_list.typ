@@ -1,10 +1,10 @@
 // Printable lab worksheet of the LLE points to repeat, built from out/repeat_list.csv.
-// Regenerate:  uv run audit_repeats.py && typst compile repeat_list.typ out/repeat_list.pdf
+// Regenerate:  uv run python lle/audit_repeats.py && typst compile --root . lle/repeat_list.typ out/repeat_list.pdf
 #set page(paper: "a4", flipped: true, margin: (x: 1.4cm, y: 1.4cm), numbering: "1 / 1")
 #set text(font: "Helvetica", size: 9.5pt)
 #set table(stroke: 0.4pt + luma(160), inset: 5pt)
 
-#let rows = csv("out/repeat_list.csv", row-type: dictionary)
+#let rows = csv("/out/repeat_list.csv", row-type: dictionary)
 #let todo = rows.filter(r => r.repeat == "yes")
 #let tern = todo.filter(r => r.kind == "ternary")
 #let bin = todo.filter(r => r.kind == "binary")

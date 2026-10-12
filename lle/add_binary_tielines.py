@@ -15,7 +15,7 @@ the sheet's own HBA/HBD slopes ($G$2/$H$2). The normalized endpoints land in AE/
 fill_ternarios.py only touches rows 5-24, so this hand-filled block is invisible to it.
 Any old separate `Bloque X bin` sheets (earlier design) are deleted.
 
-Run: uv run add_binary_tielines.py   (edits Sistemas ternarios_MF.xlsx in place; SKIPS
+Run: uv run python lle/add_binary_tielines.py   (edits Sistemas ternarios_MF.xlsx in place; SKIPS
      any sheet whose tie-line block already exists, so re-running never clobbers data).
 """
 

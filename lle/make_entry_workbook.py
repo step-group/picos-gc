@@ -11,8 +11,8 @@ the others show their campaign-1 KF from Sistemas ternarios_MF.xlsx (U/V), locke
 sheet is protected without a password, so only the yellow cells take input. The row under
 the header names the master workbook's column for each value, to copy it across.
 
-Run: uv run make_entry_workbook.py [EXTRA_TUBE ...]   -> out/repeat_entry.xlsx
-Re-running keeps whatever was typed into an existing out/repeat_entry.xlsx (matched by vial
+Run: uv run python lle/make_entry_workbook.py [EXTRA_TUBE ...]   -> data/entry/repeat_entry.xlsx
+Re-running keeps whatever was typed into an existing data/entry/repeat_entry.xlsx (matched by vial
 code, previous file kept as .bak.xlsx) and refuses to save if a typed value has no cell left.
 """
 

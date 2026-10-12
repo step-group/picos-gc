@@ -3,15 +3,15 @@ name: repeat-prep-book
 description: How make_repeat_workbook.py builds the repeat campaign's lab prep book (out/aromas_equilibrios_repeat.xlsx) — hidden-not-deleted tubes, Sampling vial-sheet row heights and pagination, DES prep tables. Use before changing or debugging make_repeat_workbook.py or its test.
 ---
 
-Lab prep book for the repeat campaign: `uv run make_repeat_workbook.py [EXTRA_TUBE ...]`
-(e.g. `D2`) trims `aromas_equilibrios_vfinal.xlsx` (the campaign's prep workbook: feed
+Lab prep book for the repeat campaign: `uv run python lle/make_repeat_workbook.py [EXTRA_TUBE ...]`
+(e.g. `D2`) trims `data/workbooks/aromas_equilibrios_vfinal.xlsx` (the campaign's prep workbook: feed
 `z` per tie-line, `Lab_DES` tube-weighing sheet, `Sheet2` GC-vial sheet) to the tubes with
 a `repeat=yes` point in `out/repeat_list.csv` (binaries as `BIN<n>` via `BIN_TO_BLOCK`)
 and writes `out/aromas_equilibrios_repeat.xlsx`. `Lab_DES` keeps only the volume guide
 (A–I): the weighing/record columns J–T are hidden, since the feed is just a way into the
 two-phase region and the results come from the sampled phases. Other tubes are **hidden, not deleted**
 (the volume estimates are cross-sheet formulas openpyxl would not rewrite; unhide to get
-the full book back). The printable vial sheets (`PLANTILLA_IMPRESION.xlsx` → `Sampling`, copied in
+the full book back). The printable vial sheets (`templates/PLANTILLA_IMPRESION.xlsx` → `Sampling`, copied in
 cell by cell) keep the four vials of every kept tube plus their block's three header
 rows; block I (CamEug) is not in that template and is cloned from the last ternary block
 after the binaries, titled from `Lab_DES`. Vial codes stay `C4-T1` (hyphen; `CODE_RE`
