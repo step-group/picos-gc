@@ -11,9 +11,11 @@ def test_tracked_inputs_are_where_paths_says():
     for name in ("Sistemas ternarios_MF.xlsx", "CC_MF.xlsx", "aromas_equilibrios_vfinal.xlsx"):
         assert (WORKBOOKS / name).exists(), name
     assert (TEMPLATES / "PLANTILLA_IMPRESION.xlsx").exists()
-    assert sorted(p.name for p in ENTRY.glob("repeat*_entry.xlsx")) == [
-        "repeat2_entry.xlsx",
-        "repeat3_entry.xlsx",
-        "repeat4_entry.xlsx",
-        "repeat_entry.xlsx",
-    ]
+
+
+def test_every_round_reads_its_entry_sheet_from_data_entry():
+    # a new round's sheet may sit in data/entry/ before it joins ROUNDS
+    from repeat_results import ROUNDS
+
+    sheets = [s for _, entry in ROUNDS for s in entry]
+    assert sheets and all(s.parent == ENTRY and s.exists() for s in sheets), sheets
