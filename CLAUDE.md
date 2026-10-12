@@ -3,11 +3,12 @@
 CLI tool for automatic multi-peak integration of Shimadzu `.gcd` GC files.
 
 Run: `uv run picos-gc *.gcd` (or a directory). Test: `uv run pytest`. Uses `uv`, not pip/python directly.
+`pcsaft-quaternary` is a submodule: a fresh clone needs `git submodule update --init` before uv can sync.
 
 ## Which file holds what (LLE measurements)
 - **Inputs, hand-made, never written by a script:** `Sistemas ternarios_MF.xlsx` (campaign 1:
   masses, KF), one typed entry sheet per repeat round (`out/repeat_entry.xlsx`,
-  `out/repeat2_entry.xlsx`, `out/repeat3_entry.xlsx` — force-tracked although `out/` is
+  `out/repeat2_entry.xlsx` … `out/repeat4_entry.xlsx` — force-tracked although `out/` is
   ignored; `git add -f`), one GC folder per batch under `FLECK_TERPENOS2026/`, `CC_MF.xlsx`.
 - **The complete record:** `out/vial_ledger.csv` (`repeat_results.py`) — every vial ever
   injected, campaign 1 (`round` 0) and each round in `ROUNDS`, with `status`
@@ -68,9 +69,7 @@ the ternaries (`binary_vials` → `aqueous_keep` cherry-pick → `binary_endpoin
 **organic** endpoint (water < 0.5) is KF-anchored (`water_src=kf`), the **aqueous** one takes
 water **by difference** (`bydiff`), so aqueous KF is optional. Never read the sheet's cached
 binary formula cells (AA/AE–AG rows 25–28): they go stale between recalcs — Bloque H's cached
-AA25 read 0.35 while its raw cells close at 0.94. A block needs masses + the organic KF. `plot_experimental_tielines.py` draws the endpoints as
-a green tie-line on the 2PE-free edge in all three views (`_experimental`, `_experimental_zoom`,
-`_aqueous_log`). All 8 blocks resolve both endpoints (every aqueous one `bydiff`: no
+AA25 read 0.35 while its raw cells close at 0.94. A block needs masses + the organic KF. All 8 blocks resolve both endpoints (every aqueous one `bydiff`: no
 aqueous KF was measured).
 
 ## Response transfer (per GC batch)
@@ -81,8 +80,8 @@ endpoints, the May binaries 0.97, the September repeats (t_R 10.7, the calibrati
 `results_rows`, `binary_endpoint` and `two_pe_endpoint` divide the **aqueous** organics by it
 (it cancels in the organic KF anchor). The batch is the block's own sequence for campaign 1,
 `BINARIOS_TERPENOS` for the edges, and the round folder for a row `repeat_results.patch`
-overwrote (`BATCH_COL`, in-memory only). A batch with no clean organic endpoint (round 2) stays
-at 1. Evidence it is the instrument, not the sample: the 2PE-rich aqueous family read 7.5 %
+overwrote (`BATCH_COL`, in-memory only). A batch with no clean organic endpoint stays
+at 1 unless `TRANSFER_PROXY` lends it another batch's (round 2 borrows round 1's). Evidence it is the instrument, not the sample: the 2PE-rich aqueous family read 7.5 %
 low in campaign-1 blocks against round-1 ones before the correction, +0.5 % after.
 
 ## Repeat audit
@@ -113,9 +112,7 @@ D5, F5, I2), and the `dropped` column names it. Points with no vials (C4, C5) ap
 but are **absent** from `ternarios_resultados.csv`. A single KF titration is reported as
 `n_kf`, not a repeat reason. Re-run `fill_ternarios.py` first if the master
 workbook changed. Printable lab worksheet (checkboxes, sample codes, per-reason action):
-`typst compile repeat_list.typ out/repeat_list.pdf` — it reads the CSV, no Python. Test without the project venv (it cannot sync while `pcsaft-quaternary`
-is an empty gitlink): `uv run --no-project --with openpyxl --with pytest pytest --noconftest
--o pythonpath=. tests/test_audit_repeats.py tests/test_fill_ternarios.py`.
+`typst compile repeat_list.typ out/repeat_list.pdf` — it reads the CSV, no Python.
 
 Lab prep book for the repeat campaign: `uv run make_repeat_workbook.py [EXTRA_TUBE ...]` →
 `out/aromas_equilibrios_repeat.xlsx`; how it trims, hides and paginates is in the
@@ -133,7 +130,7 @@ lists only its aqueous vials, so `repeat_results.patch` replaces only those and 
 phase and its KF stay campaign 1's; the prep book's vial sheet hides the two organic rows
 (which phase is organic comes from campaign-1 KF, `organic_phase`, now in
 `make_repeat_workbook`) and notes it in Notes. Round 2 (2026-09-23), every tube aqueous-only: `--round 2 A1:aq A4:aq A5:aq F5:aq I2:aq B2:aq B3:aq B4:aq
-BIN6:aq`; `repeat_results.TENTATIVE` lists the same points. Block A's organic phase
+BIN6:aq`. Block A's organic phase
 floats when thymol–carvone-rich (A1 A3 A4) and sinks when 2PE-rich (A2 A5); the entry
 sheet reads that off campaign-1 KF, so it is right, not a mix-up.
 
@@ -151,8 +148,7 @@ workbook column of each value. Test: `tests/test_make_entry_workbook.py`. The fi
 **tracked** (force-added despite `out/` being ignored; later edits show as modified).
 
 ## Repeat campaign results
-`PYTHONPATH=src:. .venv/bin/python repeat_results.py` (the project venv cannot sync, see above)
-integrates `FLECK_TERPENOS2026/REPETICIONES_22SEP2026/` with its **own** retention-time map
+`uv run python repeat_results.py` integrates `FLECK_TERPENOS2026/REPETICIONES_22SEP2026/` with its **own** retention-time map
 (`REPEAT_TR`: a new 17-min method, 2PE at 10.72, carvone at 9.67 — `label_terpenos`' maps
 would read carvone as 2PE) and the block taken from the sample-name prefix (the folder mixes
 blocks; `BIN<n>` → `BIN_TO_BLOCK`). It patches each weighed repeat vial (masses, KF from
@@ -167,10 +163,8 @@ Rounds stack in `ROUNDS` order (round 2 = `REPETICIONES_26SEP2026` + `out/repeat
 aqueous vials only): "old" is every round but the last, the export carries all of them;
 `ALIAS` maps round 2's phase-less `BIN6_1/2` to `BIN6_B1/B2`.
 Round 3 (prepared 2026-09-28, both phases, fresh organic KF): `--round 3 B5 BIN2`, 8 vials (the water-2PE binary was on the entry sheet too, but the user did not run it -- dropped 2026-09-29; round 1's stays) -- the
-two campaign-1 points round 2 left above block B's trend; `TENTATIVE` holds them until it
-lands, then append its `(batch, out/repeat3_entry.xlsx)` to `ROUNDS`. Measured by the
-user on 2026-09-28 (the thymol-geraniol points); its GC folder and typed sheet are not in
-yet. **One round = one GC batch + one entry sheet**: never add tubes to a round already run.
+two campaign-1 points round 2 left above block B's trend. Measured by the user on
+2026-09-28 (the thymol-geraniol points); landed with round 4, below. **One round = one GC batch + one entry sheet**: never add tubes to a round already run.
 
 Round 4 (prepared 2026-09-28, aqueous only -- the user's call: the organic phases are sound,
 a whole-vial slip cancels in the anchor): `--round 4 H2:aq H5:aq I4:aq BIN5:aq`
