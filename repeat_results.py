@@ -63,9 +63,15 @@ from picos_gc.detector import detect_peaks
 from picos_gc.integrator import integrate_all_peaks
 
 _ROOT = Path(__file__).resolve().parent
-ROUNDS = [  # (GC batch, typed entry sheet), in the order they were measured
-    (_ROOT / "FLECK_TERPENOS2026" / "REPETICIONES_22SEP2026", _ROOT / "out" / "repeat_entry.xlsx"),
-    (_ROOT / "FLECK_TERPENOS2026" / "REPETICIONES_26SEP2026", _ROOT / "out" / "repeat2_entry.xlsx"),
+ROUNDS = [  # (GC batch, typed entry sheets), in the order they were measured
+    (_ROOT / "FLECK_TERPENOS2026" / "REPETICIONES_22SEP2026", (_ROOT / "out" / "repeat_entry.xlsx",)),
+    (_ROOT / "FLECK_TERPENOS2026" / "REPETICIONES_26SEP2026", (_ROOT / "out" / "repeat2_entry.xlsx",)),
+    # the user's rounds 3 and 4, prepared apart but injected in one sequence (8-9 Oct): one
+    # round here, so its phi comes from round 3's organic phases and both get compared
+    (
+        _ROOT / "FLECK_TERPENOS2026" / "REPETICIONES_07OCT2026",
+        (_ROOT / "out" / "repeat3_entry.xlsx", _ROOT / "out" / "repeat4_entry.xlsx"),
+    ),
 ]
 # Round 2's operator named the F edge's aqueous vials without the phase letter.
 ALIAS = {"BIN6_1": "BIN6_B1", "BIN6_2": "BIN6_B2"}
@@ -346,8 +352,9 @@ FIELDS = ["campaign", "block", "system", "phase", "w_2pe", "hba", "w_hba", "hbd"
 # draw as suspect until round 2 replaces them. Round 2 landed (REPETICIONES_26SEP2026)
 # and cleared those; it left two campaign-1 points of block B above its now-clean trend
 # (2026-09-28, the user's call): B5 at 400 ppm terpene between B3's 160 and B1's 80, and
-# the B edge at 1160 ppm, 3.6x B2 (edge_ternary_mismatch). Queued for round 3.
-TENTATIVE = {"B5", "B-bin"}
+# the B edge at 1160 ppm, 3.6x B2 (edge_ternary_mismatch). Queued for round 3, which
+# landed (REPETICIONES_07OCT2026) and cleared both: B5 130 ppm, the B edge 420 ppm.
+TENTATIVE: set[str] = set()
 TERN_HEAD = ["block", "system", "phase", "solute_2phet", "HBA", "HBA_wt", "HBD", "HBD_wt",
              "water", "closure", "n_vials", "flags", "water_src"]  # fmt: skip
 BIN_HEAD = ["block", "phase", "HBA", "HBA_wt", "HBD", "HBD_wt", "water", "water_src", "flags"]
@@ -409,7 +416,10 @@ def ledger(rounds: list[tuple[str, dict, dict]]) -> list[dict]:
 
 
 def main() -> None:
-    rounds = [(batch.name, integrate(batch), read_entry(entry)) for batch, entry in ROUNDS]
+    rounds = [
+        (batch.name, integrate(batch), {k: v for p in sheets for k, v in read_entry(p).items()})
+        for batch, sheets in ROUNDS
+    ]
     wb_old, _, _ = patched(rounds[:-1])
     wb_new, tubes, new_rows = patched(rounds)
     systems = {_system(t) for t in tubes}

@@ -166,7 +166,7 @@ KF-less mostly-water phase as by-difference with a blank closure (`binary_vials`
 Rounds stack in `ROUNDS` order (round 2 = `REPETICIONES_26SEP2026` + `out/repeat2_entry.xlsx`,
 aqueous vials only): "old" is every round but the last, the export carries all of them;
 `ALIAS` maps round 2's phase-less `BIN6_1/2` to `BIN6_B1/B2`.
-Round 3 (prepared 2026-09-28, both phases, fresh organic KF): `--round 3 B5 BIN2` (entry sheet: `B5 BIN2 2PE`, the water-2PE binary re-measured too, hand-prepared, not in the prep book) -- the
+Round 3 (prepared 2026-09-28, both phases, fresh organic KF): `--round 3 B5 BIN2`, 8 vials (the water-2PE binary was on the entry sheet too, but the user did not run it -- dropped 2026-09-29; round 1's stays) -- the
 two campaign-1 points round 2 left above block B's trend; `TENTATIVE` holds them until it
 lands, then append its `(batch, out/repeat3_entry.xlsx)` to `ROUNDS`. Measured by the
 user on 2026-09-28 (the thymol-geraniol points); its GC folder and typed sheet are not in
@@ -177,8 +177,20 @@ a whole-vial slip cancels in the anchor): `--round 4 H2:aq H5:aq I4:aq BIN5:aq`
 (8 vials) -- two of the replicate screen's undecidable aqueous pairs (H5, I4), the E edge,
 and H2 (its one surviving vial sits off both its block's terpene trend and K). Not
 repeated, the user's calls: F3 and F4 also fail the screen, but their means sit on block
-F's trend, so they keep the two-point interval; C2 reads above its own edge (1218 ± 143 vs
-1018 ± 93 ppm, the gap 1.17x their combined U), within experimental reach. The droplet pairs
+F's trend, so they keep the two-point interval. C2 reads above its own water-solvent edge
+(1218 ± 97 vs 1018 ± 75 ppm, 1.63x their combined U since 2026-09-29); it was put back
+into round 4 on paper (branch `round3-plan`, 56f3ac7) but the user did not run it
+(2026-10-12), so it stays campaign 1's. The droplet pairs
 (A2, B1, B5, H2) otherwise need no repeat: aqueous_keep takes their leaner vial. An
 aqueous-only batch has no organic endpoint to estimate phi from: run a CC_MF standard at
 the start, middle and end of the sequence (or add it to TRANSFER_PROXY, as round 2 is).
+
+Rounds 3 and 4 landed together (2026-10-12): the user injected both in one sequence,
+`REPETICIONES_07OCT2026` (8-9 Oct, 16 vials, no standard), so `ROUNDS` holds them as one
+entry with both entry sheets (`ROUNDS`' second element is a tuple of sheets) and the
+ledger calls all 16 vials round 3. Its phi (0.937) comes from round 3's organic phases.
+Round 3's organic KF was not re-measured: the user chose to reuse campaign 1's (written
+into the sheet as `reused: campaign 1`). B5 and the B edge cleared, so `TENTATIVE` is
+empty; H5, I4 and the E edge cleared; H2's aqueous now fails the screen on carvacrol at
+the floor (0.015 vs 0.037 mV·min, its 2PE agrees to 10 %). Both entry sheets hide every
+column but the three masses (user's request); a rebuild unhides them.
