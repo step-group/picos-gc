@@ -37,10 +37,17 @@ build-backend = "uv_build"
 [tool.ruff]
 line-length = 100
 target-version = "py313"
+extend-exclude = ["pcsaft-quaternary"]  # its own repo, linted there
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "C4", "RUF"]
-ignore = ["E501"]  # long help strings; line length is advisory here
+ignore = [
+    "E501",  # long help strings; line length is advisory here
+    "RUF001", "RUF002", "RUF003",  # α, ×, − are the chemistry's own symbols
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["E402"]  # imports after sys.path / skip guards
 
 [tool.mypy]
 python_version = "3.13"

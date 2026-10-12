@@ -31,7 +31,7 @@ import matplotlib.pyplot as plt
 
 from picos_gc.baseline import ALLOWED_METHODS, correct_baseline
 from picos_gc.detector import DetectionParams, detect_peaks, estimate_noise
-from picos_gc.integrator import PeakResult, integrate_all_peaks
+from picos_gc.integrator import integrate_all_peaks
 from picos_gc.reader import read_gcd, time_to_index
 
 # --- configuration ----------------------------------------------------------
@@ -187,7 +187,7 @@ def derive_terpene_windows(all_peaks, names):
     report.sort(key=lambda r: r["total_area"], reverse=True)
     top2 = sorted(report[:2], key=lambda r: r["median_tR"])
     windows = {}
-    for cluster, nm in zip(top2, names):
+    for cluster, nm in zip(top2, names, strict=False):
         c = cluster["median_tR"]
         windows[nm] = (c - TERP_TOL, c + TERP_TOL)
     return windows
@@ -316,7 +316,7 @@ def process_binarios(bd: Path):
         try:
             ch = load_chrom(fp)
             pk = integrate_all_peaks(ch, detect_peaks(ch, PARAMS))
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             print(f"  ERROR {fp.name}: {exc}")
             continue
         per_file.append((fp, ch, pk))
@@ -501,7 +501,7 @@ def main(argv=None) -> None:
             try:
                 ch = load_chrom(fp)
                 pk = integrate_all_peaks(ch, detect_peaks(ch, PARAMS))
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 print(f"  ERROR {fp.name}: {exc}")
                 continue
             per_file.append((fp, ch, pk))

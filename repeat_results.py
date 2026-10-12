@@ -375,11 +375,11 @@ def export(wb, tern_csv: Path, bin_csv: Path) -> None:
     with tern_csv.open("w", newline="") as fh:
         w = csv.writer(fh)
         w.writerow(TERN_HEAD)
-        w.writerows(r[:11] + [_flag(r[11], r[1]), r[12]] for r in rows)
+        w.writerows([*r[:11], _flag(r[11], r[1]), r[12]] for r in rows)
     with bin_csv.open("w", newline="") as fh:
         w = csv.writer(fh)
         w.writerow(BIN_HEAD)
-        w.writerows(r + [_flag("", f"{r[0]}-bin")] for r in binary_tieline_rows(wb, phi))
+        w.writerows([*r, _flag("", f"{r[0]}-bin")] for r in binary_tieline_rows(wb, phi))
 
 
 def patched(rounds: list[tuple[dict, dict]]) -> tuple[openpyxl.Workbook, list[str], set]:

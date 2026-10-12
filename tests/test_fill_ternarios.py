@@ -6,7 +6,7 @@ import pytest
 pytest.importorskip("openpyxl")  # fill_ternarios imports openpyxl at module load
 from types import SimpleNamespace
 
-from fill_ternarios import kf_anchor, replicate_screen, results_rows, transfer_factors
+from fill_ternarios import CAL_AREAS, kf_anchor, replicate_screen, results_rows, transfer_factors
 
 
 def test_kf_anchor_identity_when_closed():
@@ -87,6 +87,12 @@ def test_transfer_factor_is_the_organic_closure_and_corrects_the_aqueous_only():
     assert rows["Superior"][3:9] == plain["Superior"][3:9]
 
 
+needs_cal_areas = pytest.mark.skipif(
+    not CAL_AREAS.exists(), reason="out/ is generated: run label_terpenos.py first"
+)
+
+
+@needs_cal_areas
 def test_power_law_response_inverts_and_bends_below_linear():
     from fill_ternarios import CC_MF, PURITY, Response, cc_mf_models
 
@@ -100,6 +106,7 @@ def test_power_law_response_inverts_and_bends_below_linear():
     assert all(1.02 < m.beta < 1.07 for m in models.values())
 
 
+@needs_cal_areas
 def test_calibration_areas_come_from_the_chromatograms():
     # CC_MF col O was integrated by hand and missed its chromatograms by up to 7 %
     # (camphor's scatter 4.9 % in ln A); label_terpenos' areas hold every compound's

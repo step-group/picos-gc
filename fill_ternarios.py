@@ -207,7 +207,7 @@ def cc_mf_models(xlsx: Path) -> dict[str, Response]:
             x = [math.log(w * PURITY.get(key, 1.0)) for w, _ in pts]
             y = [math.log(a) for _, a in pts]
             xm, ym = sum(x) / len(x), sum(y) / len(y)
-            beta = sum((xi - xm) * (yi - ym) for xi, yi in zip(x, y)) / sum(
+            beta = sum((xi - xm) * (yi - ym) for xi, yi in zip(x, y, strict=True)) / sum(
                 (xi - xm) ** 2 for xi in x
             )
             out[key] = Response(math.exp(ym - beta * xm), beta)
@@ -742,7 +742,7 @@ def results_rows(
         # express the per-vial mixup drop (e.g. E2), so they'd otherwise show a phantom.
         if norm[0] is not None:
             anchor = min(r["row"] for r in g)
-            for col, val in zip(("AD", "AE", "AF", "AG"), norm):
+            for col, val in zip(("AD", "AE", "AF", "AG"), norm, strict=True):
                 ws[f"{col}{anchor}"] = val
         out.append(
             [

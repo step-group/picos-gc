@@ -302,7 +302,7 @@ def _sampling(wb, tubes: set[str], lab, keep_lab: set[int], aq_only=frozenset())
 
 def _two_pe_lab_row(lab) -> None:
     _copy_row(lab, LAB_2PE_ROW - 1, LAB_2PE_ROW, ncols=10)
-    for c, v in zip("ABCDEF", (TWO_PE, "2PE (sin DES)", "2-PE", "Agua", 4, 4)):
+    for c, v in zip("ABCDEF", (TWO_PE, "2PE (sin DES)", "2-PE", "Agua", 4, 4), strict=True):
         lab[f"{c}{LAB_2PE_ROW}"] = v
 
 
