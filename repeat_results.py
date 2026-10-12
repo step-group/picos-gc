@@ -64,8 +64,14 @@ from picos_gc.integrator import integrate_all_peaks
 
 _ROOT = Path(__file__).resolve().parent
 ROUNDS = [  # (GC batch, typed entry sheets), in the order they were measured
-    (_ROOT / "FLECK_TERPENOS2026" / "REPETICIONES_22SEP2026", (_ROOT / "out" / "repeat_entry.xlsx",)),
-    (_ROOT / "FLECK_TERPENOS2026" / "REPETICIONES_26SEP2026", (_ROOT / "out" / "repeat2_entry.xlsx",)),
+    (
+        _ROOT / "FLECK_TERPENOS2026" / "REPETICIONES_22SEP2026",
+        (_ROOT / "out" / "repeat_entry.xlsx",),
+    ),
+    (
+        _ROOT / "FLECK_TERPENOS2026" / "REPETICIONES_26SEP2026",
+        (_ROOT / "out" / "repeat2_entry.xlsx",),
+    ),
     # the user's rounds 3 and 4, prepared apart but injected in one sequence (8-9 Oct): one
     # round here, so its phi comes from round 3's organic phases and both get compared
     (
@@ -475,7 +481,9 @@ def main() -> None:
     led = ledger(rounds)
 
     def keyed(rs):
-        return sorted(({c: r[c] for c in vials[0]} for r in rs), key=lambda r: [str(r[c]) for c in LEDGER_KEY])
+        return sorted(
+            ({c: r[c] for c in vials[0]} for r in rs), key=lambda r: [str(r[c]) for c in LEDGER_KEY]
+        )
 
     if keyed(r for r in led if r["status"] == "current") != keyed(vials):
         raise SystemExit("vial ledger's current rows differ from vial_measurements_repeat.csv")

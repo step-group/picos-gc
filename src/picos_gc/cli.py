@@ -141,7 +141,9 @@ def _plot_file(result: FileResult, output_dir: Path) -> None:
     # distinct height so the tags separate vertically; *3 top leaves tag headroom.
     # ponytail: linthresh=1 keeps sub-mV baseline noise in the flat linear zone.
     ax.set_yscale("symlog", linthresh=1.0)
-    ax.set_ylim(bottom=-1.0, top=ax.get_ylim()[1] * 10)  # ~1 decade so the tallest peak's tag clears the title
+    ax.set_ylim(
+        bottom=-1.0, top=ax.get_ylim()[1] * 10
+    )  # ~1 decade so the tallest peak's tag clears the title
     fig.tight_layout()
 
     stem = Path(result.filename).stem

@@ -205,7 +205,9 @@ def test_no_overlapping_windows_after_merges():
     chrom = make_chrom(sig)
     peaks = detect_peaks(
         chrom,
-        DetectionParams(min_height=50, min_prominence=20, min_distance=10, merge_shoulder_ratio=0.5),
+        DetectionParams(
+            min_height=50, min_prominence=20, min_distance=10, merge_shoulder_ratio=0.5
+        ),
     )
     for a, b in itertools.pairwise(peaks):
         assert a.right_base <= b.left_base

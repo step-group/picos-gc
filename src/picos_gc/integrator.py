@@ -98,9 +98,7 @@ def integrate_all_peaks(
     Isolated peaks are identical in all modes.
     """
     if split_mode not in ("valley", "drop", "deconvolve"):
-        raise ValueError(
-            f"split_mode must be 'valley', 'drop' or 'deconvolve', got {split_mode!r}"
-        )
+        raise ValueError(f"split_mode must be 'valley', 'drop' or 'deconvolve', got {split_mode!r}")
 
     areas: list[float] = []
     if split_mode == "valley":

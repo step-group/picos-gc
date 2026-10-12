@@ -222,7 +222,9 @@ def organic_phase(tube: str, kf: dict) -> str:
         vals = [v for rep in (1, 2) for v in kf.get((ph, rep), ()) if isinstance(v, int | float)]
         if vals and sum(vals) / len(vals) < 100 * ORGANIC_WATER_MAX:
             return ph
-    raise ValueError(f"{tube}: no campaign-1 KF below {100 * ORGANIC_WATER_MAX:.0f} % in either phase")
+    raise ValueError(
+        f"{tube}: no campaign-1 KF below {100 * ORGANIC_WATER_MAX:.0f} % in either phase"
+    )
 
 
 def _sampling(wb, tubes: set[str], lab, keep_lab: set[int], aq_only=frozenset()) -> None:
@@ -474,7 +476,9 @@ def main() -> None:
         + ", ".join(f"{d} {g:.1f} g" for d, g in sorted(des_need(tubes).items()))
     )
     pdf = to_pdf(print_copy(out))
-    print(f"Bench printout: {pdf}" if pdf else "Bench printout: no LibreOffice, open the _print.xlsx")
+    print(
+        f"Bench printout: {pdf}" if pdf else "Bench printout: no LibreOffice, open the _print.xlsx"
+    )
 
 
 if __name__ == "__main__":

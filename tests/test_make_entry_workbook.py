@@ -29,11 +29,17 @@ def test_rebuild_keeps_what_was_typed_and_reports_what_it_cannot():
     old = build({"C4", "D3"}).active
     old["E9"], old["P9"], old["M9"] = 2.768, "cap cracked", 3.61  # C4-T1: mass, note, fresh KF
     inputs = typed(old)
-    assert inputs == {"C4-T1": {"E": 2.768, "P": "cap cracked", "M": 3.61}}  # 300 µL default skipped
+    assert inputs == {
+        "C4-T1": {"E": 2.768, "P": "cap cracked", "M": 3.61}
+    }  # 300 µL default skipped
     new = build({"C4", "D2", "D3"}).active  # D2 lands between C4 and D3: rows shift
     assert carry(new, inputs) == []
     row = {new[f"B{r}"].value: r for r in range(FIRST, new.max_row + 1)}
     assert new[f"E{row['C4-T1']}"].value == 2.768 and new[f"M{row['C4-T1']}"].value == 3.61
     # a typed value whose cell went away (tube dropped, or KF cell now locked) is reported
-    assert carry(build({"D3"}).active, inputs) == ["C4-T1 E=2.768", "C4-T1 M=3.61", "C4-T1 P=cap cracked"]
+    assert carry(build({"D3"}).active, inputs) == [
+        "C4-T1 E=2.768",
+        "C4-T1 M=3.61",
+        "C4-T1 P=cap cracked",
+    ]
     assert carry(build({"C5"}).active, {"C5-T1": {"M": 5.7}}) == ["C5-T1 M=5.7"]  # aqueous: locked

@@ -74,8 +74,7 @@ def analyze(rows: list[dict]) -> None:
     """Print the aqueous KF closure-drift table + per-block and overall summaries."""
     aq = [r for r in rows if _is_aqueous(r)]
     print(f"\nAqueous-phase KF closure drift  ({len(aq)} rows, water > {AQUEOUS_WATER_MIN})")
-    print(f"{'system':<8}{'water_KF':>10}{'closure':>10}{'drift':>9}"
-          f"{'Δwater':>11}{'organics':>10}")
+    print(f"{'system':<8}{'water_KF':>10}{'closure':>10}{'drift':>9}{'Δwater':>11}{'organics':>10}")
     print("-" * 58)
     per_block: dict[str, list[float]] = {}
     worst = (0.0, "")
@@ -88,8 +87,10 @@ def analyze(rows: list[dict]) -> None:
         if abs(drift) > worst[0]:
             worst = (abs(drift), r["system"])
         # organics scale by exactly `closure`, i.e. (closure-1) relative change
-        print(f"{r['system']:<8}{water:>10.5f}{closure:>10.5f}{drift:>+9.4f}"
-              f"{dwater:>+11.6f}{drift * 100:>+9.2f}%")
+        print(
+            f"{r['system']:<8}{water:>10.5f}{closure:>10.5f}{drift:>+9.4f}"
+            f"{dwater:>+11.6f}{drift * 100:>+9.2f}%"
+        )
 
     print("\nPer-block mean / max |drift|:")
     all_ad: list[float] = []
@@ -100,11 +101,12 @@ def analyze(rows: list[dict]) -> None:
 
     mean_ad = sum(all_ad) / len(all_ad)
     rms = (sum(d * d for d in all_ad) / len(all_ad)) ** 0.5
-    print(f"\nOverall: mean|drift|={mean_ad:.4f}  rms={rms:.4f}  "
-          f"worst={worst[1]} ({worst[0]:.4f})")
-    print("Reading: |drift| is how far KF misses aqueous mass balance (=1). By-difference "
-          "forces it to 0;\n         reported water barely moves (Δwater), but the dissolved "
-          "2PE/terpene solubilities\n         scale by `closure` (the `organics` column).")
+    print(f"\nOverall: mean|drift|={mean_ad:.4f}  rms={rms:.4f}  worst={worst[1]} ({worst[0]:.4f})")
+    print(
+        "Reading: |drift| is how far KF misses aqueous mass balance (=1). By-difference "
+        "forces it to 0;\n         reported water barely moves (Δwater), but the dissolved "
+        "2PE/terpene solubilities\n         scale by `closure` (the `organics` column)."
+    )
 
 
 def write_bydiff_csv(rows: list[dict], fieldnames: list[str]) -> None:
@@ -140,8 +142,15 @@ def _check() -> None:
     # closure == 1 (mass closes) ⇒ by-difference agrees with KF, organics unscaled.
     assert abs(water_bydiff(0.97, 1.0) - 0.97) < 1e-12
     # A synthetic normalized aqueous row round-trips to a known endpoint summing to 1.
-    row = {"solute_2phet": "0.02000", "HBA_wt": "0.01000", "HBD_wt": "0.01000",
-           "water": "0.96000", "closure": "0.90000", "HBA": "X", "HBD": "Y"}
+    row = {
+        "solute_2phet": "0.02000",
+        "HBA_wt": "0.01000",
+        "HBD_wt": "0.01000",
+        "water": "0.96000",
+        "closure": "0.90000",
+        "HBA": "X",
+        "HBD": "Y",
+    }
     out = bydiff_row(row)
     vals = [float(out[c]) for c in COMP_COLS]
     assert abs(sum(vals) - 1.0) < 1e-6, vals  # endpoint closes to 1

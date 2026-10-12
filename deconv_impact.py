@@ -86,7 +86,14 @@ def main(argv: list[str] | None = None) -> None:
             continue
         for r in peak_area_deltas(chrom, params):
             out_rows.append(
-                [fp.name, r["peak_n"], r["tR_min"], r["drop_area"], r["deconv_area"], r["pct_change"]]
+                [
+                    fp.name,
+                    r["peak_n"],
+                    r["tR_min"],
+                    r["drop_area"],
+                    r["deconv_area"],
+                    r["pct_change"],
+                ]
             )
             if abs(r["pct_change"]) > 0.1:
                 n_changed += 1
@@ -106,7 +113,9 @@ def main(argv: list[str] | None = None) -> None:
         w.writerows(out_rows)
 
     print(f"\n{len(files)} files, {len(out_rows)} peaks")
-    print(f"peaks changed >0.1%: {n_changed}  (raw largest |change|: {max_abs:.1f}% — near-zero peaks)")
+    print(
+        f"peaks changed >0.1%: {n_changed}  (raw largest |change|: {max_abs:.1f}% — near-zero peaks)"
+    )
     print(
         f"peaks with area >= {noise_floor:g}: {n_big}  |  of those changed >1%: "
         f"{n_big_changed}  |  largest |change|: {max_big:.2f}%"

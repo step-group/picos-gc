@@ -641,9 +641,7 @@ def aqueous_keep(vials: list[dict], terp_max: float) -> list[dict]:
         # The terpenes must be what moved: droplets carry 2PE too (B1's is 1.16x) but
         # far less, relative to what is dissolved; a pair apart in 2PE alone is not
         # droplets and stays flagged.
-        if replicate_screen(keep) == "component_spread" and all(
-            v["s"] and _terp(v) for v in keep
-        ):
+        if replicate_screen(keep) == "component_spread" and all(v["s"] and _terp(v) for v in keep):
             (s1, s2), (t1, t2) = ([v["s"] for v in keep], [_terp(v) for v in keep])
             if abs(math.log(t2 / t1)) > abs(math.log(s2 / s1)):
                 keep = [min(keep, key=_terp)]

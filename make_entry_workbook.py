@@ -50,8 +50,20 @@ PHASE = {"T": "Superior", "B": "Inferior"}
 HEAD = ["Tube", "Vial code", "Phase", "Role", "Vial, g", "Sample, µL", "Vial + sample, g",
         "IPA, µL", "Vial + sample + IPA, g", "Sample, g", "IPA, g", "Dilution factor",
         "KF 1, % m/m", "KF 2, % m/m", "KF status", "Notes"]  # fmt: skip
-MASTER_COL = {"E": "D", "F": "E", "G": "F", "H": "G", "I": "H", "J": "I", "K": "J", "M": "U", "N": "V"}
-WIDTH = dict(zip("ABCDEFGHIJKLMNOP", (7, 11, 10, 9, 9, 9, 12, 8, 13, 9, 9, 9, 10, 10, 22, 28), strict=True))
+MASTER_COL = {
+    "E": "D",
+    "F": "E",
+    "G": "F",
+    "H": "G",
+    "I": "H",
+    "J": "I",
+    "K": "J",
+    "M": "U",
+    "N": "V",
+}
+WIDTH = dict(
+    zip("ABCDEFGHIJKLMNOP", (7, 11, 10, 9, 9, 9, 12, 8, 13, 9, 9, 9, 10, 10, 22, 28), strict=True)
+)
 HEAD_ROW, LETTER_ROW, EXAMPLE_ROW, FIRST = 6, 7, 8, 9
 
 ARIAL = Font(name="Arial", size=10)
@@ -102,7 +114,13 @@ def build(
         ws[cell].fill = fill
 
     _row(ws, EXAMPLE_ROW, "example", "A1-T1", "T", "organic")
-    for c, v in (("E", 2.7385), ("G", 2.9211), ("I", 3.4876), ("M", 1.93), ("O", "fresh (example)")):
+    for c, v in (
+        ("E", 2.7385),
+        ("G", 2.9211),
+        ("I", 3.4876),
+        ("M", 1.93),
+        ("O", "fresh (example)"),
+    ):
         ws[f"{c}{EXAMPLE_ROW}"] = v
     for cell in ws[EXAMPLE_ROW]:
         cell.fill, cell.protection = PatternFill(), Protection(locked=True)
@@ -172,7 +190,11 @@ def typed(ws) -> dict[str, dict[str, object]]:
     """Vial code -> {column: value} of every unlocked (= input) cell holding more than its default."""
     out = {}
     for r in range(FIRST, ws.max_row + 1):
-        vals = {c.column_letter: c.value for c in ws[r] if not c.protection.locked and c.value is not None}
+        vals = {
+            c.column_letter: c.value
+            for c in ws[r]
+            if not c.protection.locked and c.value is not None
+        }
         if vals.get("F") == SAMPLE_UL:
             del vals["F"]
         if vals:
@@ -206,7 +228,10 @@ def main() -> None:
     if out.exists():  # the user types into out: a rebuild keeps every typed cell
         lost = carry(wb.active, typed(openpyxl.load_workbook(out).active))
         if lost:
-            sys.exit(f"refusing to overwrite {out.name}, these inputs have no cell left:\n  " + "\n  ".join(lost))
+            sys.exit(
+                f"refusing to overwrite {out.name}, these inputs have no cell left:\n  "
+                + "\n  ".join(lost)
+            )
         shutil.copy2(out, out.with_suffix(".bak.xlsx"))
     wb.save(out)
     n_vials = sum(2 if t in aq_only else 4 for t in tubes)

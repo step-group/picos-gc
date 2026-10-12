@@ -1,4 +1,5 @@
 """Unit tests for the KF-anchored normalization, the replicate screen and the transfer."""
+
 from __future__ import annotations
 
 import pytest
@@ -38,9 +39,7 @@ def test_replicate_screen_names_the_failure():
     # F3 organic: vial 10 reads 1.64x vial 9 in every component -- a weighing slip
     assert replicate_screen([_v(0.30, 0.20, 0.20), _v(0.49, 0.33, 0.33)]) == "whole_vial"
     # B1 aqueous: droplets carry the terpenes 4x and leave 2PE at 1.16x
-    assert replicate_screen([_v(0.02, 1e-4, 1e-4), _v(0.023, 4e-4, 4e-4)]) == (
-        "component_spread"
-    )
+    assert replicate_screen([_v(0.02, 1e-4, 1e-4), _v(0.023, 4e-4, 4e-4)]) == ("component_spread")
     # clean pairs agree to a few % per vial; one vial, or a binary's zero 2PE, is no pair
     assert replicate_screen([_v(0.02, 1e-4, 1e-4), _v(0.0205, 1.04e-4, 0.97e-4)]) == ""
     assert replicate_screen([_v(0.02, 1e-4, 1e-4)]) == ""

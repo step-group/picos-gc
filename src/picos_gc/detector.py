@@ -265,7 +265,9 @@ def _is_fused(signal: np.ndarray, a: DetectedPeak, b: DetectedPeak) -> bool:
         f
         for f in (
             _side_floor(signal, min(a.base_left, a.left_base), a.apex_left, at_start=True),
-            _side_floor(signal, b.apex_right + 1, max(b.base_right, b.right_base) + 1, at_start=False),
+            _side_floor(
+                signal, b.apex_right + 1, max(b.base_right, b.right_base) + 1, at_start=False
+            ),
         )
         if f is not None
     ]
