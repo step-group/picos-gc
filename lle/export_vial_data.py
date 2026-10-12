@@ -23,18 +23,17 @@ out/vial_measurements_repeat.csv -- the one that matches the tie-lines TESIS use
 from __future__ import annotations
 
 import csv
-from pathlib import Path
 
 import openpyxl
 
+import paths
 from fill_ternarios import PURITY, batch_of, calibration_points, canon
 
-_ROOT = Path(__file__).resolve().parent
-WB = _ROOT / "Sistemas ternarios_MF_filled.xlsx"
-CC = _ROOT / "CC_MF.xlsx"
-MERGED = _ROOT / "out"
-OUT_VIALS = _ROOT / "out" / "vial_measurements.csv"
-OUT_CAL = _ROOT / "out" / "gc_calibration.csv"
+WB = paths.OUT / "Sistemas ternarios_MF_filled.xlsx"
+CC = paths.WORKBOOKS / "CC_MF.xlsx"
+MERGED = paths.OUT
+OUT_VIALS = paths.OUT / "vial_measurements.csv"
+OUT_CAL = paths.OUT / "gc_calibration.csv"
 
 # Rows 5-24 are the five ternary systems (4 rows each: 2 Superior, 2 Inferior);
 # rows 25-28 are the water-solvent binary endpoint in the same pattern.

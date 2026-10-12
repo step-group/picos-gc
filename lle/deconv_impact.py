@@ -13,6 +13,7 @@ import csv
 import sys
 from pathlib import Path
 
+import paths
 from picos_gc.baseline import correct_baseline
 from picos_gc.detector import DetectionParams, detect_peaks
 from picos_gc.integrator import integrate_all_peaks
@@ -104,7 +105,7 @@ def main(argv: list[str] | None = None) -> None:
                     n_big_changed += 1
                 max_big = max(max_big, abs(r["pct_change"]))
 
-    out_dir = Path("out")
+    out_dir = paths.OUT
     out_dir.mkdir(exist_ok=True)
     out_path = out_dir / "deconv_impact.csv"
     with out_path.open("w", newline="") as fh:

@@ -12,6 +12,7 @@ wheels/
 # Generated outputs
 out/
 out.zip
+*.bak.xlsx
 
 # Tooling caches
 .pytest_cache/

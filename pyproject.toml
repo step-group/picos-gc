@@ -38,6 +38,7 @@ build-backend = "uv_build"
 line-length = 100
 target-version = "py313"
 extend-exclude = ["pcsaft-quaternary"]  # its own repo, linted there
+src = ["src", "lle"]  # so isort treats the lle/ scripts as first-party
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "C4", "RUF"]
@@ -60,7 +61,7 @@ ignore_missing_imports = true  # scipy / olefile / matplotlib ship no type stubs
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["."]
+pythonpath = [".", "lle"]
 addopts = "-q"
 
 [tool.uv.workspace]

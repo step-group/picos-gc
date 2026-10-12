@@ -20,13 +20,13 @@ from __future__ import annotations
 
 import shutil
 import sys
-from pathlib import Path
 
 import openpyxl
 from openpyxl.comments import Comment
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Protection, Side
 from openpyxl.worksheet.datavalidation import DataValidation
 
+import paths
 from fill_ternarios import BIN_TO_BLOCK, WB_IN
 from make_repeat_workbook import (
     LIST,
@@ -38,7 +38,7 @@ from make_repeat_workbook import (
     tubes_from_list,
 )
 
-OUT = Path(__file__).resolve().parent / "out" / "repeat_entry.xlsx"
+OUT = paths.ENTRY / "repeat_entry.xlsx"
 # Organic KF re-measured by the user in the repeat campaign (2026-09-22); every other
 # repeat tube keeps its campaign-1 organic KF.
 FRESH_KF = {"C4", "C5", "D1", "E1", "I1", "2PE"}

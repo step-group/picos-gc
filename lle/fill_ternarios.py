@@ -37,15 +37,16 @@ from typing import NamedTuple
 
 import openpyxl
 
-_ROOT = Path(__file__).resolve().parent  # script-relative so CWD doesn't matter
-WB_IN = _ROOT / "Sistemas ternarios_MF.xlsx"
-WB_OUT = _ROOT / "Sistemas ternarios_MF_filled.xlsx"
-CC_MF = _ROOT / "CC_MF.xlsx"
-CAL_AREAS = _ROOT / "out" / "AaCALIBRACION_TERPENOS" / "areas.csv"  # label_terpenos
-DATA = _ROOT / "FLECK_TERPENOS2026"
-OUT_CSV = _ROOT / "out" / "ternarios_resultados.csv"
-BIN_OUT_CSV = _ROOT / "out" / "binarios_tielines.csv"  # computed Water-solvent binary endpoints
-BINARIOS_CSV = _ROOT / "out" / "BINARIOS_TERPENOS" / "samples.csv"
+import paths
+
+WB_IN = paths.WORKBOOKS / "Sistemas ternarios_MF.xlsx"
+WB_OUT = paths.OUT / "Sistemas ternarios_MF_filled.xlsx"
+CC_MF = paths.WORKBOOKS / "CC_MF.xlsx"
+CAL_AREAS = paths.OUT / "AaCALIBRACION_TERPENOS" / "areas.csv"  # label_terpenos
+DATA = paths.GC
+OUT_CSV = paths.OUT / "ternarios_resultados.csv"
+BIN_OUT_CSV = paths.OUT / "binarios_tielines.csv"  # computed Water-solvent binary endpoints
+BINARIOS_CSV = paths.OUT / "BINARIOS_TERPENOS" / "samples.csv"
 # BIN system -> ternary block, SEQUENTIAL (BIN n = the nth block in order A,B,C,D,E,F,H,I):
 # 1=ThyCarvone(A) 2=ThyGer(B) 3=ThyCarvacrol(C) 4=ThyEugenol(D) 5=ThyCamphor(E)
 # 6=CamphorCarvone(F) 7=CamphorCarvacrol(H) 8=CamphorEugenol(I). Carvone reads as
@@ -850,7 +851,7 @@ def run_tieline_plots(warn: list[str]) -> None:
     """Run the pcsaft-quaternary tie-line plotter on the CSV we just wrote. It lives
     in a separate uv project (its venv has python-ternary/matplotlib, which this one
     does not), so shell out with `uv run` in that dir rather than importing it."""
-    plot_dir = Path(__file__).parent / "pcsaft-quaternary"
+    plot_dir = paths.PCSAFT_QUATERNARY
     if not (plot_dir / "plot_experimental_tielines.py").exists():
         warn.append(f"tie-line plotter not found under {plot_dir}")
         return
@@ -894,7 +895,7 @@ def main() -> None:
         if not folders:
             warn.append(f"{block}: no FLECK data folder")
             continue
-        merged = _ROOT / "out" / Path(folders[0]).name / "merged_samples.csv"
+        merged = paths.OUT / Path(folders[0]).name / "merged_samples.csv"
         if not merged.exists():
             warn.append(f"{block}: {merged} missing - run label_terpenos.py")
             continue
@@ -963,7 +964,7 @@ def _selfcheck() -> None:
         w *= PURITY[canon(sheet)]
         assert abs(m.conc(a) / w - 1) < 0.06, (sheet, w, m.conc(a))
     assert abs(m.conc(m.alpha * 7.0**m.beta) - 7.0) < 1e-9, "conc does not invert alpha·C^beta"
-    a = load_vial_areas(_ROOT / "out" / "A1T1 AL A5B2" / "merged_samples.csv")
+    a = load_vial_areas(paths.OUT / "A1T1 AL A5B2" / "merged_samples.csv")
     assert abs(a[(1, "T", 1)]["2pe"] - 143.81) < 1, a[(1, "T", 1)]
     assert canon("2PE") == "2pe" and canon("DL-Camphor") == "camphor", "canon broken"
     assert parse_key("BM1-T1") == (1, "T", 1) and parse_key("E3_B2") == (3, "B", 2), "parse_key"

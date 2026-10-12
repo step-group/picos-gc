@@ -31,12 +31,12 @@ from pathlib import Path
 import openpyxl
 from openpyxl.worksheet.pagebreak import Break
 
+import paths
 from fill_ternarios import _BIN_ROWS, BIN_TO_BLOCK, ORGANIC_WATER_MAX, WB_IN, _vial_rows
 
-_ROOT = Path(__file__).resolve().parent
-SRC = _ROOT / "aromas_equilibrios_vfinal.xlsx"
-LIST = _ROOT / "out" / "repeat_list.csv"
-OUT = _ROOT / "out" / "aromas_equilibrios_repeat.xlsx"
+SRC = paths.WORKBOOKS / "aromas_equilibrios_vfinal.xlsx"
+LIST = paths.OUT / "repeat_list.csv"
+OUT = paths.OUT / "aromas_equilibrios_repeat.xlsx"
 _FEED_REF = re.compile(r"'2-phenylethanol_DES'!I(\d+)")
 LAB_ROWS, LAB_BIN_HEADER = range(10, 68), 58
 # The water-2PE binary has no row in the lab workbook: it is written into the empty row
@@ -48,7 +48,9 @@ TWO_PE, LAB_2PE_ROW = "2PE", 67
 # the sampled phases, so nothing is recorded there. Only the volume guide A-I stays.
 LAB_RECORD_COLS, LAB_RECORD_LABELS = "JKLMNOPQRST", ("D7", "F7")
 FEED_ROWS = range(6, 64)
-SAMPLING_SRC = _ROOT / "PLANTILLA_IMPRESION.xlsx"  # sheet "Sampling": printable vial sheets
+SAMPLING_SRC = (
+    paths.TEMPLATES / "PLANTILLA_IMPRESION.xlsx"
+)  # sheet "Sampling": printable vial sheets
 _BLOCK_TITLE = re.compile(r"^([A-Z]) — ")  # "C — ThyCarvac  (Thymol + Carvacrol)"
 _VIAL_CODE = re.compile(r"-[TB][12]$")  # C4-T1, BIN1-B2: a row somebody writes masses into
 # One height for every vial row, ~8.5 mm: the template mixes 15 pt (ternary, too small to

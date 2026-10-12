@@ -34,10 +34,10 @@ from __future__ import annotations
 
 import csv
 import statistics
-from pathlib import Path
 
 import openpyxl
 
+import paths
 from fill_ternarios import (
     BIN_PAIRS,
     BIN_TO_BLOCK,
@@ -56,9 +56,8 @@ from fill_ternarios import (
     vial_fractions,
 )
 
-_ROOT = Path(__file__).resolve().parent
-WB = _ROOT / "Sistemas ternarios_MF_filled.xlsx"
-OUT = _ROOT / "out" / "repeat_list.csv"
+WB = paths.OUT / "Sistemas ternarios_MF_filled.xlsx"
+OUT = paths.OUT / "repeat_list.csv"
 REPEAT_FLAGS = ("low_closure", "replicate_mismatch")
 # A tie-line whose organic phase is this rich in 2PE is the water+2PE binary with a few
 # % terpene in it, whatever the block: one number, measured once per block.

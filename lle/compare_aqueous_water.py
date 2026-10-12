@@ -27,13 +27,13 @@ import csv
 import os
 import subprocess
 import sys
-from pathlib import Path
 
-_ROOT = Path(__file__).resolve().parent
-SRC_CSV = _ROOT / "out" / "ternarios_resultados.csv"
-BYDIFF_CSV = _ROOT / "out" / "ternarios_resultados_bydiff.csv"
-PLOT_DIR = _ROOT / "pcsaft-quaternary"
-BYDIFF_TIELINES = _ROOT / "out" / "tielines_bydiff"
+import paths
+
+SRC_CSV = paths.OUT / "ternarios_resultados.csv"
+BYDIFF_CSV = paths.OUT / "ternarios_resultados_bydiff.csv"
+PLOT_DIR = paths.PCSAFT_QUATERNARY
+BYDIFF_TIELINES = paths.OUT / "tielines_bydiff"
 
 AQUEOUS_WATER_MIN = 0.5  # reported water above this ⇒ aqueous phase
 # The four composition value columns (names HBA/HBD are copied verbatim).

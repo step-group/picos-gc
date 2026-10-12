@@ -36,6 +36,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import openpyxl
 
+import paths
 from audit_repeats import COLS, audit, ternary_recs, transfer_of
 from export_vial_data import vial_rows
 from fill_ternarios import (
@@ -62,27 +63,26 @@ from label_terpenos import (
 from picos_gc.detector import detect_peaks
 from picos_gc.integrator import integrate_all_peaks
 
-_ROOT = Path(__file__).resolve().parent
 ROUNDS = [  # (GC batch, typed entry sheets), in the order they were measured
     (
-        _ROOT / "FLECK_TERPENOS2026" / "REPETICIONES_22SEP2026",
-        (_ROOT / "out" / "repeat_entry.xlsx",),
+        paths.GC / "REPETICIONES_22SEP2026",
+        (paths.ENTRY / "repeat_entry.xlsx",),
     ),
     (
-        _ROOT / "FLECK_TERPENOS2026" / "REPETICIONES_26SEP2026",
-        (_ROOT / "out" / "repeat2_entry.xlsx",),
+        paths.GC / "REPETICIONES_26SEP2026",
+        (paths.ENTRY / "repeat2_entry.xlsx",),
     ),
     # the user's rounds 3 and 4, prepared apart but injected in one sequence (8-9 Oct): one
     # round here, so its phi comes from round 3's organic phases and both get compared
     (
-        _ROOT / "FLECK_TERPENOS2026" / "REPETICIONES_07OCT2026",
-        (_ROOT / "out" / "repeat3_entry.xlsx", _ROOT / "out" / "repeat4_entry.xlsx"),
+        paths.GC / "REPETICIONES_07OCT2026",
+        (paths.ENTRY / "repeat3_entry.xlsx", paths.ENTRY / "repeat4_entry.xlsx"),
     ),
 ]
 # Round 2's operator named the F edge's aqueous vials without the phase letter.
 ALIAS = {"BIN6_1": "BIN6_B1", "BIN6_2": "BIN6_B2"}
-CC_MF = _ROOT / "CC_MF.xlsx"
-OUT = _ROOT / "out"
+CC_MF = paths.WORKBOOKS / "CC_MF.xlsx"
+OUT = paths.OUT
 
 # ponytail: retention times of THIS batch's method (read off its chromatograms); a
 # batch on another method needs its own map.

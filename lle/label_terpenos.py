@@ -26,6 +26,8 @@ from pathlib import Path
 import matplotlib
 import numpy as np
 
+import paths
+
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
@@ -35,8 +37,8 @@ from picos_gc.integrator import integrate_all_peaks
 from picos_gc.reader import read_gcd, time_to_index
 
 # --- configuration ----------------------------------------------------------
-DATA_DIR = Path("FLECK_TERPENOS2026")
-OUT_DIR = Path("out")
+DATA_DIR = paths.GC
+OUT_DIR = paths.OUT
 PARAMS = DetectionParams()
 BASELINE_METHOD = "arpls"  # global drift removal (library default); None disables
 
