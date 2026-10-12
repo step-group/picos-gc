@@ -17,3 +17,7 @@ out.zip
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
+
+# macOS / Claude Code
+.DS_Store
+.claude/worktrees/

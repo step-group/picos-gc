@@ -1,0 +1,3 @@
+[submodule "pcsaft-quaternary"]
+	path = pcsaft-quaternary
+	url = https://github.com/step-group/pcsaft-quaternary.git
