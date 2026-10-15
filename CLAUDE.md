@@ -1,15 +1,9 @@
 # picos-gc
 
-CLI tool for automatic multi-peak integration of Shimadzu `.gcd` GC files.
-
 Run: `uv run picos-gc *.gcd` (or a directory). Test: `uv run pytest`. Uses `uv`, not pip/python directly.
 `pcsaft-quaternary` is a submodule: a fresh clone needs `git submodule update --init` before uv can sync.
 
 ## Which file holds what (LLE measurements)
-- **Layout:** `lle/` the LLE scripts (run `uv run python lle/<script>.py` from the repo
-  root), `data/gc/` one GC folder per batch, `data/workbooks/` the hand-made workbooks,
-  `data/entry/` the typed entry sheets, `templates/` the print templates, `out/`
-  regenerable only. `lle/paths.py` is the only place a location is defined.
 - **Inputs, hand-made, never written by a script:** `data/workbooks/Sistemas ternarios_MF.xlsx`
   (campaign 1: masses, KF), one typed entry sheet per repeat round
   (`data/entry/repeat_entry.xlsx`, `repeat2_entry.xlsx` … `repeat4_entry.xlsx`), one GC
@@ -25,16 +19,7 @@ Run: `uv run picos-gc *.gcd` (or a directory). Test: `uv run pytest`. Uses `uv`,
 - A new round: add its GC folder and entry sheet, append it to `ROUNDS`, re-run.
 
 ## Architecture (`src/picos_gc/`)
-- `deconvolution.py` — EMG (exponentially-modified Gaussian) curve-fit for fused peak groups; `integrator` uses it for `--split-mode deconvolve` (fits N≥2 groups, falls back to `drop` on any fit failure; isolated peaks unchanged, so only fused-group `area_mV_min` differs)
-
 Deconvolution impact on real data (`lle/deconv_impact.py`) is small: quantified analytes are well-resolved, so sizable peaks (area ≥ 1) move <~23% only for a handful of fused shoulders and the giant solvent peak — quantified terpene/2PE areas barely change. Run: `uv run python lle/deconv_impact.py data/gc/<batch>`.
-
-## `.gcd` metadata: sample name
-The operator-entered sample name lives in the OLE2 `File Property` stream as
-`<smpl_name>@StoX@<hex></smpl_name>` (`@StoX@` = Shimadzu "store as hex"; hex-decode
-to text). `read_gcd` surfaces it as `Chromatogram.sample_name` (`None` if absent).
-Verified present in all project `.gcd` files; `smpl_name == smpl_id`; blanks are
-named `BNK*`. It appears as the leading `sample_name` column in both output CSVs.
 
 ## Excel mapping (downstream quantification)
 `label_terpenos.py` labels each injection by its embedded `sample_name` (blanks →
@@ -93,63 +78,28 @@ low in campaign-1 blocks against round-1 ones before the correction, +0.5 % afte
 ## Repeat audit
 `uv run python lle/audit_repeats.py` reads the filled workbook only (no other `out/` file)
 and writes `out/repeat_list.csv`: one row per (system, phase) point, ternary **and** binary,
-with a `repeat` verdict. Reasons: `missing_vials` (blank L/M/N = never injected),
-`low_closure`, `replicate_mismatch` (both via `fill_ternarios.results_rows`, so they match
-the pipeline; the latter is `replicate_screen` — the two vials' dilution-corrected fractions
-off together by > `SCREEN_WHOLE_VIAL` (a weighing/transcription slip) or apart by >
-`SCREEN_SPREAD` (droplets), either phase; it replaced a 3x raw-area gate that passed all 13
-failed pairs, 2026-09-28), `aqueous_organics_suspect` (organic droplets in **every** kept aqueous vial: terpenes above
-the pair's summed pure-water solubility at 30 °C +20 % method tolerance, `AQ_SOLUBILITY_30C`
-× `AQ_SOLUBILITY_TOL` in `aq_terpene_max`, 2.8–4.9 g/L by pair) and
-`aqueous_2pe_outlier` (the 2PE-rich endpoint of every block is the same system — organic
-phase 87–89 % 2PE, ~8 % water in all eight — so their aqueous phases are one number
-measured once per block, 21–27 g/L since the transfer correction; `_2pe_outliers` flags a miss
-of the median by > `AQ_2PE_OUTLIER`. It is a cross-block pass, the only rule that needs
-every sheet at once, and it cannot be an absolute literature bound: published 2PE
-solubility at 30 °C spans 21–33 g/L, wider than the disagreement) and
-`edge_ternary_mismatch` (a block's water–solvent edge and its solvent-richest tie-line —
-the one fed ~2 % 2PE — sit against the same ~96 % solvent organic phase, so their aqueous
-terpene must agree; `_edge_vs_ternary` flags a factor over `EDGE_TERNARY_MAX` and blames
-the **richer** of the two, since droplets only add terpene. Catches A-bin, C-bin, H1).
-Informational, never a repeat: `single_vial` (one clean vial is accepted) and
-`dropped_replicate` — `fill_ternarios.aqueous_keep` already cherry-picks: it drops a vial
-that sampled the wrong phase (E2) or an aqueous vial with droplets whose pair is clean (D2,
-D5, F5, I2), and the `dropped` column names it. Points with no vials (C4, C5) appear here
-but are **absent** from `ternarios_resultados.csv`. A single KF titration is reported as
-`n_kf`, not a repeat reason. Re-run `fill_ternarios.py` first if the master
-workbook changed. Printable lab worksheet (checkboxes, sample codes, per-reason action):
+with a `repeat` verdict. The reason catalogue, each threshold constant and what it caught
+are in the `repeat-audit` skill — read it before touching the script or a threshold.
+Re-run `fill_ternarios.py` first if the master workbook changed. Printable lab worksheet
+(checkboxes, sample codes, per-reason action):
 `typst compile --root . lle/repeat_list.typ out/repeat_list.pdf` — it reads the CSV, no Python.
 
 Lab prep book for the repeat campaign: `uv run python lle/make_repeat_workbook.py [EXTRA_TUBE ...]` →
-`out/aromas_equilibrios_repeat.xlsx`; how it trims, hides and paginates is in the
-`repeat-prep-book` skill — read it before touching that script. It also writes the **bench
-printout**, `*_print.xlsx` + `.pdf` (headless LibreOffice): only DES prep, tube prep and the
-GC vial sheets, the columns computed from what gets written in hidden (`PRINT_HIDE_COLS`),
-their width given to Notes so the vial-sheet page breaks still hold. Print that one.
+`out/aromas_equilibrios_repeat.xlsx` plus the **bench printout** `*_print.xlsx` + `.pdf`
+(print that one). How it trims, hides and paginates, and what the printout hides, is in the
+`repeat-prep-book` skill — read it before touching that script.
 
 Later rounds: `--round N TUBE ...` on both `make_repeat_workbook.py` and
-`make_entry_workbook.py` takes exactly the named tubes (no `repeat_list.csv`, no
-`EXTRA_TUBES`), writes `out/aromas_equilibrios_repeat<N>.xlsx` / `data/entry/repeat<N>_entry.xlsx`
-so round 1's typed record is never rebuilt over, and opens every organic KF cell (a new
-tube is a new tie-line). A `:aq` suffix (`B2:aq`) makes a tube aqueous-only: the entry sheet
-lists only its aqueous vials, so `repeat_results.patch` replaces only those and the organic
-phase and its KF stay campaign 1's; the prep book's vial sheet hides the two organic rows
-(which phase is organic comes from campaign-1 KF, `organic_phase`, now in
-`make_repeat_workbook`) and notes it in Notes. Round 2 (2026-09-23), every tube aqueous-only: `--round 2 A1:aq A4:aq A5:aq F5:aq I2:aq B2:aq B3:aq B4:aq
+`make_entry_workbook.py`; the mechanics (exact tubes only, per-round files, the `:aq`
+aqueous-only suffix) and how the entry sheet is built and re-read are in the `repeat-round`
+skill. Round 2 (2026-09-23), every tube aqueous-only: `--round 2 A1:aq A4:aq A5:aq F5:aq I2:aq B2:aq B3:aq B4:aq
 BIN6:aq`. Block A's organic phase
 floats when thymol–carvone-rich (A1 A3 A4) and sinks when 2PE-rich (A2 A5); the entry
 sheet reads that off campaign-1 KF, so it is right, not a mix-up.
 
 Data-entry sheet for the repeat vials: `uv run python lle/make_entry_workbook.py [EXTRA_TUBE ...]` →
-`data/entry/repeat_entry.xlsx`, one row per vial of the same tubes plus `EXTRA_TUBES` (the `2PE`
-water binary, `2PE-T1` … `2PE-B2`, and D2). **The user types into that file**: a re-run reads
-every unlocked cell of the existing one (`typed`), writes it back by vial code (`carry`),
-keeps the previous file as `.bak.xlsx`, and refuses to save if a typed value has no input
-cell left. Masses on every vial; KF only on the **organic** phase (picked from
-the campaign-1 KF < `ORGANIC_WATER_MAX`; `ORGANIC_OVERRIDE` for a tube with no history: `2PE`) and
-only typeable for the tubes in `FRESH_KF` (organic KF re-measured) — the others show their
-campaign-1 `U/V` read-only. Sheet protected without password; row 7 names the master
-workbook column of each value. Test: `tests/test_make_entry_workbook.py`. The filled
+`data/entry/repeat_entry.xlsx`. **The user types into that file**; a re-run carries the typed
+cells over and keeps the previous file as `.bak.xlsx` (details in `repeat-round`). The filled
 `data/entry/repeat_entry.xlsx` is the lab record of the repeat campaign's weighings and KF, so
 it is **tracked** (later edits show as modified; its `.bak.xlsx` is ignored).
 

@@ -32,3 +32,10 @@ The 5 g variant
 prints the grams of each DES the tubes consume (cached `Lab_DES` estimates; binaries as
 4 mL) as a check against that 10 g. Test:
 `tests/test_make_repeat_workbook.py` (same no-project invocation).
+
+## Bench printout
+
+The script also writes the **bench printout**, `*_print.xlsx` + `.pdf` (headless
+LibreOffice): only DES prep, tube prep and the GC vial sheets, the columns computed from
+what gets written in hidden (`PRINT_HIDE_COLS`), their width given to Notes so the
+vial-sheet page breaks still hold. Print that one, not the full prep book.
